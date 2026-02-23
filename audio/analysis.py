@@ -63,3 +63,59 @@ def hz_to_note_name(frequency_hz: float) -> tuple[str | None, int | None]:
     octave = (midi // 12) - 1
 
     return note_name, octave
+
+
+# ---------------------------------------------------------------------------
+# Spectrogram computation
+# ---------------------------------------------------------------------------
+
+def compute_spectrogram_column(
+    samples: np.ndarray,
+    sample_rate: int = 44100,
+    n_fft: int = 2048,
+) -> np.ndarray:
+    """Compute one vertical column of a spectrogram from audio samples.
+
+    Applies a Hann window to reduce spectral leakage, then computes the
+    real FFT and converts to decibels.
+
+    Args:
+        samples:     Audio samples as a 1D float32 numpy array.
+                     Should have length >= n_fft.
+        sample_rate: Samples per second (Hz). Default: 44100.
+        n_fft:       FFT size. Larger = better frequency resolution but
+                     more CPU. Default: 2048 (~46 ms at 44100 Hz).
+
+    Returns:
+        1D numpy array of shape (n_fft//2 + 1,) containing the magnitude
+        spectrum in decibels (dB). Higher values = louder at that frequency.
+
+    Note:
+        The frequency of bin i is: i * sample_rate / n_fft Hz.
+        So bin 0 = 0 Hz (DC), bin 1 = ~21.5 Hz, ..., bin 1024 = 22050 Hz.
+    """
+    # Use the most recent n_fft samples (or all samples if shorter)
+    chunk = samples[-n_fft:] if len(samples) >= n_fft else samples
+
+    # Pad with zeros if shorter than n_fft
+    if len(chunk) < n_fft:
+        chunk = np.pad(chunk, (0, n_fft - len(chunk)))
+
+    # Apply a Hann window to reduce "spectral leakage" — the phenomenon
+    # where energy from one frequency bleeds into neighboring bins.
+    window = np.hanning(n_fft)
+    windowed = chunk.astype(np.float64) * window
+
+    # Real FFT: since audio is real-valued, we only need the positive
+    # frequency half. Output has n_fft//2 + 1 complex values.
+    spectrum_complex = np.fft.rfft(windowed, n=n_fft)
+
+    # Magnitude: |complex| gives amplitude at each frequency bin.
+    # Normalize by n_fft so that a full-scale sine wave peaks near 0 dB.
+    magnitude = np.abs(spectrum_complex) / n_fft
+
+    # Convert to decibels. Add a tiny floor (1e-10) to avoid log(0).
+    # 20 * log10 because we're working with amplitude (not power).
+    spectrum_db = 20.0 * np.log10(magnitude + 1e-10)
+
+    return spectrum_db.astype(np.float32)
