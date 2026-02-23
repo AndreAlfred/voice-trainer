@@ -119,3 +119,81 @@ def compute_spectrogram_column(
     spectrum_db = 20.0 * np.log10(magnitude + 1e-10)
 
     return spectrum_db.astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
+# Pitch estimation
+# ---------------------------------------------------------------------------
+
+def estimate_pitch(
+    samples: np.ndarray,
+    sample_rate: int = 44100,
+    fmin: float = 80.0,
+    fmax: float = 1200.0,
+    confidence_threshold: float = 0.3,
+) -> float | None:
+    """Estimate the fundamental frequency (pitch) of a voice signal.
+
+    Uses normalized autocorrelation: a signal with a period of T samples
+    will have a strong autocorrelation peak at lag T.
+
+    Args:
+        samples:              Audio samples, 1D float array.
+        sample_rate:          Samples per second.
+        fmin:                 Minimum detectable pitch in Hz (default: 80 Hz, low bass).
+        fmax:                 Maximum detectable pitch in Hz (default: 1200 Hz, high soprano).
+        confidence_threshold: Minimum normalized correlation to accept as voiced.
+                              Range 0–1. Higher = stricter. Default: 0.3.
+
+    Returns:
+        Estimated frequency in Hz, or None if no clear pitch is detected.
+    """
+    if len(samples) < 2:
+        return None
+
+    # Convert lag range from Hz to samples.
+    # A 440 Hz pitch repeats every 44100/440 ≈ 100 samples.
+    min_lag = int(sample_rate / fmax)  # shortest period = highest pitch
+    max_lag = int(sample_rate / fmin)  # longest period = lowest pitch
+
+    if max_lag >= len(samples):
+        max_lag = len(samples) - 1
+    if min_lag >= max_lag:
+        return None
+
+    # Normalize samples to avoid scale effects on confidence
+    samples_f = samples.astype(np.float64)
+    samples_norm = samples_f / (np.max(np.abs(samples_f)) + 1e-10)
+
+    # Check signal level — don't try to pitch-detect silence
+    rms = np.sqrt(np.mean(samples_norm ** 2))
+    if rms < 0.01:  # Threshold: ~-40 dB
+        return None
+
+    # Compute autocorrelation via convolution with reversed self.
+    # autocorr[lag] measures how similar the signal is to itself shifted by `lag` samples.
+    n = len(samples_norm)
+    autocorr = np.correlate(samples_norm, samples_norm, mode='full')
+    autocorr = autocorr[n - 1:]  # Keep only non-negative lags
+
+    # Normalize by the zero-lag value (autocorr[0] = total signal energy).
+    # This gives values in [-1, 1] regardless of signal amplitude.
+    if autocorr[0] <= 0:
+        return None
+    autocorr = autocorr / autocorr[0]
+
+    # Find the lag with the highest autocorrelation within our pitch range.
+    search_region = autocorr[min_lag:max_lag + 1]
+    if len(search_region) == 0:
+        return None
+
+    peak_offset = np.argmax(search_region)
+    peak_lag = peak_offset + min_lag
+    peak_confidence = autocorr[peak_lag]
+
+    # Reject if confidence is too low — likely noise or silence.
+    if peak_confidence < confidence_threshold:
+        return None
+
+    # Convert lag (samples) back to frequency (Hz).
+    return float(sample_rate / peak_lag)

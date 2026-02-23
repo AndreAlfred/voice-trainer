@@ -101,3 +101,50 @@ class TestComputeSpectrogramColumn:
 
         # Peak should be within one bin of the true frequency
         assert abs(peak_freq - freq_hz) <= freq_resolution
+
+
+from audio.analysis import estimate_pitch
+
+
+class TestEstimatePitch:
+    """Test pitch estimation using autocorrelation."""
+
+    SAMPLE_RATE = 44100
+
+    def _sine_wave(self, frequency_hz: float, n_samples: int = 4096) -> np.ndarray:
+        t = np.linspace(0, n_samples / self.SAMPLE_RATE, n_samples, endpoint=False)
+        return np.sin(2 * np.pi * frequency_hz * t).astype(np.float32)
+
+    def test_detects_a4_440hz(self):
+        """Should detect A4 (440 Hz) within 5 Hz tolerance."""
+        samples = self._sine_wave(440.0)
+        pitch = estimate_pitch(samples, self.SAMPLE_RATE)
+        assert pitch is not None
+        assert abs(pitch - 440.0) < 5.0
+
+    def test_detects_middle_c_261hz(self):
+        """Should detect middle C (~261.63 Hz) within 5 Hz tolerance."""
+        samples = self._sine_wave(261.63)
+        pitch = estimate_pitch(samples, self.SAMPLE_RATE)
+        assert pitch is not None
+        assert abs(pitch - 261.63) < 5.0
+
+    def test_detects_high_soprano_c6(self):
+        """Should detect C6 (~1046.5 Hz) within 10 Hz tolerance."""
+        samples = self._sine_wave(1046.5)
+        pitch = estimate_pitch(samples, self.SAMPLE_RATE)
+        assert pitch is not None
+        assert abs(pitch - 1046.5) < 10.0
+
+    def test_silence_returns_none(self):
+        """Silence should return None — no pitch detected."""
+        samples = np.zeros(4096, dtype=np.float32)
+        pitch = estimate_pitch(samples, self.SAMPLE_RATE)
+        assert pitch is None
+
+    def test_noise_returns_none_or_a_value(self):
+        """Random noise may or may not have a pitch — just shouldn't crash."""
+        rng = np.random.default_rng(seed=42)
+        samples = rng.uniform(-0.1, 0.1, size=4096).astype(np.float32)
+        pitch = estimate_pitch(samples, self.SAMPLE_RATE)
+        assert pitch is None or (80.0 <= pitch <= 1200.0)
