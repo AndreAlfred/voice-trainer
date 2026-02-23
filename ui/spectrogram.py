@@ -24,6 +24,10 @@ FREQ_MAX_HZ = 8000.0
 DISPLAY_DB_MIN = -60.0
 DISPLAY_DB_MAX = 0.0
 
+# Number of log-spaced display bins on the frequency axis.
+# More bins = smoother gradient but slightly more memory. 512 is a good balance.
+N_LOG_BINS = 512
+
 
 class SpectrogramWidget(QWidget):
     """Scrolling spectrogram display widget.
@@ -49,13 +53,23 @@ class SpectrogramWidget(QWidget):
         self.sample_rate = sample_rate
         self.n_fft = n_fft
 
-        # Frequency axis: array of Hz values for each FFT bin
-        self._all_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate)
+        # Log-spaced frequency grid: 512 bins from FREQ_MIN_HZ to FREQ_MAX_HZ.
+        # Each octave gets equal vertical space — this matches how the ear hears
+        # and gives the F0/F1/F2 voice range ~62% of the display height instead
+        # of the ~17% it gets with a linear scale.
+        self._display_freqs = np.logspace(
+            np.log10(FREQ_MIN_HZ),
+            np.log10(FREQ_MAX_HZ),
+            N_LOG_BINS,
+            dtype=np.float32,
+        )
+        self._n_freq_bins = N_LOG_BINS
 
-        # Only display bins in our target range (80–8000 Hz)
-        self._freq_mask = (self._all_freqs >= FREQ_MIN_HZ) & (self._all_freqs <= FREQ_MAX_HZ)
-        self._display_freqs = self._all_freqs[self._freq_mask]
-        self._n_freq_bins = int(self._freq_mask.sum())
+        # Pre-compute mapping: for each log display bin, the index of the nearest
+        # linear FFT bin. Built once at startup so add_column() is a fast index lookup.
+        _all_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate)
+        self._freq_indices = np.searchsorted(_all_freqs, self._display_freqs)
+        self._freq_indices = np.clip(self._freq_indices, 0, len(_all_freqs) - 1)
 
         # Time axis: number of columns = display_seconds * update_rate
         # Update rate ≈ sample_rate / (n_fft // 2) due to 50% overlap
@@ -184,8 +198,8 @@ class SpectrogramWidget(QWidget):
             spectrum_db: Full magnitude spectrum in dB, shape (n_fft//2+1,).
                          Produced by audio.analysis.compute_spectrogram_column().
         """
-        # Extract only the frequency bins in our display range
-        display_col = spectrum_db[self._freq_mask]
+        # Map the linear FFT spectrum onto the log-spaced display grid
+        display_col = spectrum_db[self._freq_indices]
 
         # Scroll the buffer left by one column and place the new column on the right
         self._buffer[:-1] = self._buffer[1:]
