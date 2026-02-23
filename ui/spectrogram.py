@@ -21,7 +21,7 @@ FREQ_MIN_HZ = 80.0
 FREQ_MAX_HZ = 8000.0
 
 # dB range for color mapping: anything below DISPLAY_DB_MIN is shown as black
-DISPLAY_DB_MIN = -45.0
+DISPLAY_DB_MIN = -60.0
 DISPLAY_DB_MAX = 0.0
 
 
