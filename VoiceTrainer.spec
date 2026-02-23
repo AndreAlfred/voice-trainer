@@ -19,8 +19,6 @@ if _sd_spec is None:
     )
 _sd_data_src = os.path.join(os.path.dirname(_sd_spec.origin), '_sounddevice_data')
 
-block_cipher = None
-
 a = Analysis(
     ['main.py'],
     pathex=[],
@@ -44,11 +42,10 @@ a = Analysis(
     excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zlib, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
