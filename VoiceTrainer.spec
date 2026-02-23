@@ -4,15 +4,20 @@
 # Or use:     ./build_app.sh   (handles venv activation + signing automatically)
 
 import os
-import sounddevice
+import importlib.util
 
-# Path to sounddevice's bundled PortAudio binary.
+# Locate sounddevice's bundled PortAudio binary.
 # sounddevice ships its own PortAudio .dylib inside _sounddevice_data/.
 # PyInstaller won't find it automatically — we declare it explicitly.
-# Note: _sounddevice_data is a sibling of sounddevice inside site-packages,
-# so we use the same directory as sounddevice.__file__ (not one level up).
-_sd_data_src = os.path.join(os.path.dirname(sounddevice.__file__), '_sounddevice_data')
-_sd_data_src = os.path.normpath(_sd_data_src)
+_sd_spec = importlib.util.find_spec('sounddevice')
+if _sd_spec is None:
+    raise SystemExit(
+        "ERROR: sounddevice not found. Run PyInstaller from the project venv:\n"
+        "  source venv/bin/activate\n"
+        "  pyinstaller VoiceTrainer.spec\n"
+        "Or use: ./build_app.sh"
+    )
+_sd_data_src = os.path.join(os.path.dirname(_sd_spec.origin), '_sounddevice_data')
 
 block_cipher = None
 
@@ -28,10 +33,9 @@ a = Analysis(
         'PySide6.QtGui',
         'PySide6.QtWidgets',
         'PySide6.QtOpenGL',
+        'PySide6.QtOpenGLWidgets',
         'pyqtgraph',
         'numpy',
-        'scipy',
-        'scipy.signal',
         'sounddevice',
     ],
     hookspath=[],
