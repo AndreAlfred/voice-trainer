@@ -119,6 +119,29 @@ class SpectrogramWidget(QWidget):
         self._plot.setMouseEnabled(x=False, y=False)
         self._plot.hideButtons()
 
+        # --- Singer's formant band (2000–3500 Hz) ---
+        # The "singer's formant cluster" in this frequency range gives the
+        # classical voice its carrying power and "ring" over an orchestra.
+        # A persistent gold band makes it easy to see whether harmonics
+        # are landing in this zone.
+        f_lo_bin = int(np.searchsorted(self._display_freqs, 2000.0))
+        f_hi_bin = int(np.searchsorted(self._display_freqs, 3500.0))
+
+        self._singers_formant_region = pg.LinearRegionItem(
+            values=[f_lo_bin, f_hi_bin],
+            orientation='horizontal',   # horizontal = bounded by y-axis range
+            movable=False,
+            brush=pg.mkBrush(255, 215, 0, 22),   # very faint gold fill
+            pen=pg.mkPen(255, 215, 0, 60),        # slightly more visible border
+        )
+        self._plot.addItem(self._singers_formant_region)
+
+        # Label anchored to the top-left corner of the band
+        formant_label = pg.TextItem(
+            "Singer's Formant", color=(255, 215, 0, 140), anchor=(0, 1))
+        formant_label.setPos(0, f_hi_bin)
+        self._plot.addItem(formant_label)
+
     def _build_frequency_ticks(self) -> list[tuple[float, str]]:
         """Build y-axis tick marks at musically meaningful frequencies."""
         target_hz = [100, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000, 8000]
