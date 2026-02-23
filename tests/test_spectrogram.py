@@ -35,7 +35,7 @@ class TestLogFrequencyScale:
         """Last display bin should be at or near FREQ_MAX_HZ (8000 Hz)."""
         from ui.spectrogram import SpectrogramWidget, FREQ_MAX_HZ
         w = SpectrogramWidget()
-        assert abs(w._display_freqs[-1] - FREQ_MAX_HZ) < 10.0, (
+        assert abs(w._display_freqs[-1] - FREQ_MAX_HZ) < 1.0, (
             f"Expected _display_freqs[-1] ≈ {FREQ_MAX_HZ}, got {w._display_freqs[-1]}"
         )
 
@@ -51,11 +51,11 @@ class TestLogFrequencyScale:
         )
 
     def test_display_freqs_length_is_512(self, qt_app):
-        """Display grid should have exactly 512 bins."""
-        from ui.spectrogram import SpectrogramWidget
+        """Display grid should have exactly N_LOG_BINS bins."""
+        from ui.spectrogram import SpectrogramWidget, N_LOG_BINS
         w = SpectrogramWidget()
-        assert len(w._display_freqs) == 512, (
-            f"Expected 512 display bins, got {len(w._display_freqs)}"
+        assert len(w._display_freqs) == N_LOG_BINS, (
+            f"Expected {N_LOG_BINS} display bins, got {len(w._display_freqs)}"
         )
 
     def test_display_freqs_is_monotonically_increasing(self, qt_app):

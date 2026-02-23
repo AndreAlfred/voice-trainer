@@ -68,8 +68,14 @@ class SpectrogramWidget(QWidget):
         # Pre-compute mapping: for each log display bin, the index of the nearest
         # linear FFT bin. Built once at startup so add_column() is a fast index lookup.
         _all_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate)
-        self._freq_indices = np.searchsorted(_all_freqs, self._display_freqs)
-        self._freq_indices = np.clip(self._freq_indices, 0, len(_all_freqs) - 1)
+        # searchsorted gives the insertion point (next-higher bin).
+        # Compare that bin and the one below it; keep whichever is closer in Hz.
+        _insert = np.searchsorted(_all_freqs, self._display_freqs)
+        _lower = np.clip(_insert - 1, 0, len(_all_freqs) - 1)
+        _upper = np.clip(_insert,     0, len(_all_freqs) - 1)
+        _dist_lower = np.abs(_all_freqs[_lower] - self._display_freqs)
+        _dist_upper = np.abs(_all_freqs[_upper] - self._display_freqs)
+        self._freq_indices = np.where(_dist_lower <= _dist_upper, _lower, _upper)
 
         # Time axis: number of columns = display_seconds * update_rate
         # Update rate ≈ sample_rate / (n_fft // 2) due to 50% overlap
