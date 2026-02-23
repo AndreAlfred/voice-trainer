@@ -21,7 +21,7 @@ FREQ_MIN_HZ = 80.0
 FREQ_MAX_HZ = 8000.0
 
 # dB range for color mapping: anything below DISPLAY_DB_MIN is shown as black
-DISPLAY_DB_MIN = -70.0
+DISPLAY_DB_MIN = -45.0
 DISPLAY_DB_MAX = 0.0
 
 
@@ -88,8 +88,17 @@ class SpectrogramWidget(QWidget):
         self._image_item = pg.ImageItem()
         self._plot.addItem(self._image_item)
 
-        # Magma colormap: perceptually uniform dark→light
-        colormap = pg.colormap.get('magma')
+        # Custom 3-stop colormap: dark teal → warm orange → pale yellow.
+        # Starts at a visible teal (not pure black) so quiet sounds always
+        # appear as a real color rather than near-invisible dark purple.
+        colormap = pg.ColorMap(
+            pos=np.array([0.0, 0.5, 1.0]),
+            color=np.array([
+                [ 13,  79,  82, 255],  # dark teal  — silence / very quiet
+                [212,  80,  10, 255],  # warm orange — moderate energy
+                [255, 240, 160, 255],  # pale yellow — loud / strong harmonics
+            ], dtype=np.uint8),
+        )
         self._image_item.setColorMap(colormap)
         self._image_item.setLevels([DISPLAY_DB_MIN, DISPLAY_DB_MAX])
 
