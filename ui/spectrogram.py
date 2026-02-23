@@ -70,6 +70,11 @@ class SpectrogramWidget(QWidget):
             dtype=np.float32,
         )
 
+        # Rolling F1/F2 formant position buffers — one value per time column.
+        # NaN = no detection at that time step (dot not drawn at that position).
+        self._f1_bins = np.full(self._n_time_cols, np.nan, dtype=np.float32)
+        self._f2_bins = np.full(self._n_time_cols, np.nan, dtype=np.float32)
+
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -142,6 +147,21 @@ class SpectrogramWidget(QWidget):
         formant_label.setPos(0, f_hi_bin)
         self._plot.addItem(formant_label)
 
+        # F1 (light blue) and F2 (bright green) formant scatter overlays.
+        # These dots scroll with the spectrogram and show vowel formant history.
+        self._f1_scatter = pg.ScatterPlotItem(
+            size=4,
+            pen=None,
+            brush=pg.mkBrush(100, 180, 255, 200),   # light blue
+        )
+        self._f2_scatter = pg.ScatterPlotItem(
+            size=4,
+            pen=None,
+            brush=pg.mkBrush(80, 240, 120, 200),    # bright green
+        )
+        self._plot.addItem(self._f1_scatter)
+        self._plot.addItem(self._f2_scatter)
+
     def _build_frequency_ticks(self) -> list[tuple[float, str]]:
         """Build y-axis tick marks at musically meaningful frequencies."""
         target_hz = [100, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000, 8000]
@@ -174,3 +194,49 @@ class SpectrogramWidget(QWidget):
         # Update the image. pyqtgraph ImageItem interprets shape (x, y):
         # x = time (horizontal), y = frequency (vertical)
         self._image_item.setImage(self._buffer, autoLevels=False)
+
+    def add_formants(self, f1_hz: float | None, f2_hz: float | None) -> None:
+        """Add new F1/F2 estimates and refresh the scatter display.
+
+        Call this once per audio analysis frame, immediately after add_column().
+        The scatter dots scroll left in sync with the spectrogram image.
+
+        Args:
+            f1_hz: First formant frequency in Hz, or None if not detected.
+            f2_hz: Second formant frequency in Hz, or None if not detected.
+        """
+        # Scroll both position buffers left (oldest drops off the left edge)
+        self._f1_bins[:-1] = self._f1_bins[1:]
+        self._f2_bins[:-1] = self._f2_bins[1:]
+
+        # Convert Hz to the freq-bin index used by the image coordinate system.
+        # Use NaN when the formant is not detected or out of the display range.
+        freq_lo = self._display_freqs[0]
+        freq_hi = self._display_freqs[-1]
+
+        if f1_hz is not None and freq_lo <= f1_hz <= freq_hi:
+            self._f1_bins[-1] = float(np.searchsorted(self._display_freqs, f1_hz))
+        else:
+            self._f1_bins[-1] = np.nan
+
+        if f2_hz is not None and freq_lo <= f2_hz <= freq_hi:
+            self._f2_bins[-1] = float(np.searchsorted(self._display_freqs, f2_hz))
+        else:
+            self._f2_bins[-1] = np.nan
+
+        # Build x-positions (time column indices 0 … n_time_cols-1)
+        x_all = np.arange(self._n_time_cols, dtype=np.float32)
+
+        # Update F1 scatter — skip NaN entries (no detection = no dot)
+        mask1 = ~np.isnan(self._f1_bins)
+        if mask1.any():
+            self._f1_scatter.setData(x=x_all[mask1], y=self._f1_bins[mask1])
+        else:
+            self._f1_scatter.setData(x=[], y=[])
+
+        # Update F2 scatter
+        mask2 = ~np.isnan(self._f2_bins)
+        if mask2.any():
+            self._f2_scatter.setData(x=x_all[mask2], y=self._f2_bins[mask2])
+        else:
+            self._f2_scatter.setData(x=[], y=[])
