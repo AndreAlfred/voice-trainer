@@ -81,3 +81,36 @@ class TestLogFrequencyScale:
         assert w._buffer.shape[1] == w._n_freq_bins, (
             f"Buffer shape {w._buffer.shape} doesn't match n_freq_bins={w._n_freq_bins}"
         )
+
+
+class TestApplySettings:
+
+    def test_apply_settings_does_not_raise(self, qt_app):
+        from ui.spectrogram import SpectrogramWidget
+        from ui.settings import AppSettings
+        SpectrogramWidget().apply_settings(AppSettings())
+
+    def test_apply_settings_hides_singers_formant(self, qt_app):
+        from ui.spectrogram import SpectrogramWidget
+        from ui.settings import AppSettings
+        w = SpectrogramWidget()
+        w.apply_settings(AppSettings(singers_formant_visible=False))
+        assert not w._singers_formant_region.isVisible()
+
+    def test_apply_settings_resizes_buffer(self, qt_app):
+        from ui.spectrogram import SpectrogramWidget
+        from ui.settings import AppSettings
+        w = SpectrogramWidget(display_seconds=8.0)
+        original = w._n_time_cols
+        w.apply_settings(AppSettings(display_seconds=4.0))
+        assert w._n_time_cols < original
+        assert w._buffer.shape[0] == w._n_time_cols
+        assert len(w._f1_bins) == w._n_time_cols
+
+    def test_apply_settings_restores_singers_formant(self, qt_app):
+        from ui.spectrogram import SpectrogramWidget
+        from ui.settings import AppSettings
+        w = SpectrogramWidget()
+        w.apply_settings(AppSettings(singers_formant_visible=False))
+        w.apply_settings(AppSettings(singers_formant_visible=True))
+        assert w._singers_formant_region.isVisible()

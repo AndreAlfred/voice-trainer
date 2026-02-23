@@ -265,3 +265,60 @@ class SpectrogramWidget(QWidget):
             self._f2_scatter.setData(x=x_all[mask2], y=self._f2_bins[mask2])
         else:
             self._f2_scatter.setData(x=[], y=[])
+
+    def apply_settings(self, settings: object) -> None:
+        """Apply all visual settings live — no restart needed.
+
+        Args:
+            settings: AppSettings instance from ui.settings.
+        """
+        import pyqtgraph as pg
+
+        # Colormap
+        colormap = pg.ColorMap(
+            pos=np.array([0.0, 0.5, 1.0]),
+            color=np.array([
+                list(settings.color_floor) + [255],
+                list(settings.color_mid)   + [255],
+                list(settings.color_peak)  + [255],
+            ], dtype=np.uint8),
+        )
+        self._image_item.setColorMap(colormap)
+        self._image_item.setLevels([settings.db_floor, settings.db_ceiling])
+
+        # Formant dots
+        self._f1_scatter.setBrush(pg.mkBrush(*settings.f1_color, 200))
+        self._f2_scatter.setBrush(pg.mkBrush(*settings.f2_color, 200))
+        self._f1_scatter.setSize(settings.dot_size)
+        self._f2_scatter.setSize(settings.dot_size)
+
+        # Singer's formant band
+        self._singers_formant_region.setVisible(settings.singers_formant_visible)
+
+        # Background
+        r, g, b = settings.background_color
+        self._plot.setBackground(f"#{r:02x}{g:02x}{b:02x}")
+
+        # Scroll buffer resize when display_seconds changes
+        hop = self.n_fft // 2
+        new_cols = int(settings.display_seconds * (self.sample_rate / hop))
+        if new_cols != self._n_time_cols:
+            new_buf = np.full(
+                (new_cols, self._n_freq_bins),
+                fill_value=settings.db_floor,
+                dtype=np.float32,
+            )
+            copy = min(new_cols, self._n_time_cols)
+            new_buf[-copy:] = self._buffer[-copy:]
+            self._buffer = new_buf
+
+            new_f1 = np.full(new_cols, np.nan, dtype=np.float32)
+            new_f2 = np.full(new_cols, np.nan, dtype=np.float32)
+            cf = min(new_cols, len(self._f1_bins))
+            new_f1[-cf:] = self._f1_bins[-cf:]
+            new_f2[-cf:] = self._f2_bins[-cf:]
+            self._f1_bins = new_f1
+            self._f2_bins = new_f2
+
+            self._n_time_cols = new_cols
+            self._plot.setXRange(0, new_cols, padding=0)
