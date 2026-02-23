@@ -5,6 +5,7 @@ This module contains all the math:
   - hz_to_note_name:          convert a frequency (Hz) to a note name
   - compute_spectrogram_column: compute one time-slice of the spectrogram
   - estimate_pitch:            estimate the fundamental frequency of a sound
+  - estimate_formants:         estimate F1 and F2 vowel formant frequencies (LPC)
 
 All functions are pure (no side effects, no hardware access) so they
 are easy to test and reason about.
@@ -197,3 +198,131 @@ def estimate_pitch(
 
     # Convert lag (samples) back to frequency (Hz).
     return float(sample_rate / peak_lag)
+
+
+# ---------------------------------------------------------------------------
+# Formant estimation
+# ---------------------------------------------------------------------------
+
+def _lpc_levinson(signal: np.ndarray, order: int) -> np.ndarray:
+    """Solve Yule-Walker equations via Levinson-Durbin recursion.
+
+    Returns the LPC polynomial [1, a_1, ..., a_order] — same convention
+    as scipy.signal.lpc (a[0] = 1, remaining coefficients are the filter).
+
+    Args:
+        signal: 1D float64 array (pre-emphasized audio frame).
+        order:  LPC model order (number of poles).
+    """
+    n = len(signal)
+    # Biased autocorrelation r[0 .. order]
+    r = np.correlate(signal, signal, 'full')
+    r = r[n - 1:n + order] / n
+
+    if r[0] < 1e-15:
+        poly = np.zeros(order + 1)
+        poly[0] = 1.0
+        return poly
+
+    lp = np.zeros(order, dtype=np.float64)
+    E = float(r[0])
+
+    for m in range(order):
+        # Reflection coefficient for stage m
+        k = -(r[m + 1] + np.dot(lp[:m], r[m:0:-1])) / E
+        # Levinson update: new coefficients from previous + reflection
+        lp_prev = lp[:m].copy()
+        lp[m] = k
+        lp[:m] += k * lp_prev[::-1]
+        # Prediction error shrinks by (1 - k^2) each stage
+        E *= 1.0 - k * k
+        if E <= 0.0:
+            break
+
+    poly = np.empty(order + 1, dtype=np.float64)
+    poly[0] = 1.0
+    poly[1:] = lp
+    return poly
+
+
+def estimate_formants(
+    samples: np.ndarray,
+    sample_rate: int = 44100,
+    order: int = 14,
+) -> tuple[float | None, float | None]:
+    """Estimate F1 and F2 vowel formant frequencies using LPC.
+
+    LPC (Linear Predictive Coding) models the vocal tract as an all-pole
+    filter. The poles of this filter correspond to the resonance peaks
+    (formants) of the vocal tract. F1 and F2 are the two lowest-frequency
+    resonances and directly reflect vowel articulation:
+      - F1 correlates with jaw openness (low jaw → high F1)
+      - F2 correlates with tongue front/back position (front tongue → high F2)
+
+    Args:
+        samples:     Audio samples, 1D float array. Must be > order samples.
+        sample_rate: Samples per second.
+        order:       LPC model order. 14 is standard for voice analysis
+                     (rule of thumb: order ≈ 2 + sample_rate / 1000).
+
+    Returns:
+        (f1_hz, f2_hz) tuple. Either value is None if not reliably detected.
+        F1 range: 200–900 Hz. F2 range: 700–3200 Hz.
+    """
+    if len(samples) <= order:
+        return None, None
+
+    # Silence check — LPC on near-silent signals gives meaningless results
+    rms = np.sqrt(np.mean(samples.astype(np.float64) ** 2))
+    if rms < 0.01:
+        return None, None
+
+    # Pre-emphasis filter: y[n] = x[n] - 0.97 * x[n-1]
+    # Boosts high frequencies so formants above 1 kHz are clearly visible
+    # to the LPC model. Standard in speech processing.
+    pre = np.empty_like(samples, dtype=np.float64)
+    pre[0] = samples[0]
+    pre[1:] = samples[1:].astype(np.float64) - 0.97 * samples[:-1].astype(np.float64)
+
+    # Fit an all-pole LPC model of the given order.
+    # `a` is shape (order+1,) with a[0] = 1. The vocal tract is modelled as
+    # H(z) = 1 / A(z) where A(z) = sum(a[k] * z^(-k)).
+    a = _lpc_levinson(pre, order)
+
+    # Find the poles: roots of the LPC polynomial A(z).
+    roots = np.roots(a)
+
+    # Keep only roots with non-negative imaginary part.
+    # Roots come in conjugate pairs; the positive-imaginary root of each pair
+    # gives a unique frequency. (Its conjugate gives the same frequency.)
+    roots = roots[np.imag(roots) >= 0]
+
+    # Convert root angles to frequencies in Hz.
+    # A root at angle θ on the unit circle corresponds to frequency f = θ·sr/(2π).
+    freqs = np.angle(roots) * sample_rate / (2.0 * np.pi)
+
+    # Bandwidth of each resonance: narrow bandwidth = sharp, real formant.
+    # Formula: BW = -ln(|root|) * sr / π
+    # Roots well inside the unit circle (|root| << 1) have large bandwidth
+    # (broad, diffuse resonances) — likely artifacts, not formants.
+    bandwidths = -np.log(np.abs(roots) + 1e-12) * sample_rate / np.pi
+
+    # Keep poles in the voice frequency range with reasonably narrow bandwidth.
+    valid = (
+        (freqs > 90.0) &        # above noise floor
+        (freqs < 4000.0) &      # below the range we care about
+        (bandwidths > 0.0) &    # stable pole (inside unit circle)
+        (bandwidths < 500.0)    # narrow enough to be a real resonance
+    )
+    freqs = np.sort(freqs[valid])
+
+    # Apply formant-specific range gates and take the lowest candidate in each.
+    # F1: jaw/height vowel dimension (200–900 Hz)
+    # F2: tongue front/back dimension (700–3200 Hz)
+    f1_candidates = freqs[(freqs >= 200.0) & (freqs <= 900.0)]
+    f2_candidates = freqs[(freqs >= 700.0) & (freqs <= 3200.0)]
+
+    f1 = float(f1_candidates[0]) if len(f1_candidates) > 0 else None
+    f2 = float(f2_candidates[0]) if len(f2_candidates) > 0 else None
+
+    return f1, f2

@@ -148,3 +148,63 @@ class TestEstimatePitch:
         samples = rng.uniform(-0.1, 0.1, size=4096).astype(np.float32)
         pitch = estimate_pitch(samples, self.SAMPLE_RATE)
         assert pitch is None or (80.0 <= pitch <= 1200.0)
+
+
+from audio.analysis import estimate_formants
+
+
+class TestEstimateFormants:
+    """Test F1/F2 vowel formant estimation using LPC."""
+
+    SAMPLE_RATE = 44100
+
+    def _voiced_signal(self, f0: float = 150.0, n_samples: int = 4096) -> np.ndarray:
+        """Generate a voiced harmonic signal at fundamental frequency f0.
+
+        A real voice is a sum of harmonics at f0, 2*f0, 3*f0, ...
+        This mimics that structure so LPC has something to latch onto.
+        """
+        t = np.linspace(0, n_samples / self.SAMPLE_RATE, n_samples, endpoint=False)
+        signal = np.zeros(n_samples, dtype=np.float64)
+        for k in range(1, 20):
+            signal += (1.0 / k) * np.sin(2 * np.pi * f0 * k * t)
+        signal /= np.max(np.abs(signal)) + 1e-10
+        return signal.astype(np.float32)
+
+    def test_silence_returns_none_none(self):
+        """Silence has no formants — both return values must be None."""
+        samples = np.zeros(4096, dtype=np.float32)
+        f1, f2 = estimate_formants(samples, self.SAMPLE_RATE)
+        assert f1 is None
+        assert f2 is None
+
+    def test_short_buffer_returns_none_none(self):
+        """Buffer shorter than LPC order must return None safely without crashing."""
+        samples = np.random.randn(5).astype(np.float32)
+        f1, f2 = estimate_formants(samples, self.SAMPLE_RATE)
+        assert f1 is None
+        assert f2 is None
+
+    def test_detected_f1_is_in_valid_range(self):
+        """Any detected F1 must be in the valid F1 range (200–900 Hz)."""
+        samples = self._voiced_signal(f0=150.0)
+        f1, f2 = estimate_formants(samples, self.SAMPLE_RATE)
+        if f1 is not None:
+            assert 200.0 <= f1 <= 900.0, f"F1={f1:.1f} Hz is outside valid range 200–900"
+
+    def test_detected_f2_is_in_valid_range(self):
+        """Any detected F2 must be in the valid F2 range (700–3200 Hz)."""
+        samples = self._voiced_signal(f0=150.0)
+        f1, f2 = estimate_formants(samples, self.SAMPLE_RATE)
+        if f2 is not None:
+            assert 700.0 <= f2 <= 3200.0, f"F2={f2:.1f} Hz is outside valid range 700–3200"
+
+    def test_does_not_crash_on_noise(self):
+        """Random noise must not raise an exception — return None or valid values."""
+        rng = np.random.default_rng(seed=99)
+        samples = rng.uniform(-0.5, 0.5, size=4096).astype(np.float32)
+        f1, f2 = estimate_formants(samples, self.SAMPLE_RATE)  # must not raise
+        if f1 is not None:
+            assert 200.0 <= f1 <= 900.0
+        if f2 is not None:
+            assert 700.0 <= f2 <= 3200.0
