@@ -55,8 +55,8 @@ class SpectrogramWidget(QWidget):
 
         # Log-spaced frequency grid: 512 bins from FREQ_MIN_HZ to FREQ_MAX_HZ.
         # Each octave gets equal vertical space — this matches how the ear hears
-        # and gives the F0/F1/F2 voice range ~62% of the display height instead
-        # of the ~17% it gets with a linear scale.
+        # and gives the 80–3200 Hz voice range ~80% of the display height instead
+        # of the ~39% it gets with a linear scale.
         self._display_freqs = np.logspace(
             np.log10(FREQ_MIN_HZ),
             np.log10(FREQ_MAX_HZ),
@@ -191,7 +191,12 @@ class SpectrogramWidget(QWidget):
                 # Find the bin index closest to this frequency
                 idx = np.searchsorted(self._display_freqs, hz)
                 if idx < self._n_freq_bins:
-                    label = f"{hz} Hz" if hz < 1000 else f"{hz // 1000}k Hz"
+                    if hz < 1000:
+                        label = f"{hz} Hz"
+                    elif hz % 1000 == 0:
+                        label = f"{hz // 1000}k Hz"
+                    else:
+                        label = f"{hz / 1000:.1f}k Hz"
                     ticks.append((float(idx), label))
         return ticks
 

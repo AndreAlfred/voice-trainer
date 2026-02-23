@@ -1,8 +1,15 @@
-venv/
+# PyInstaller build artifacts
+build/
+dist/
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+
+# Virtual environment
+venv/
+
+# macOS
 .DS_Store
-*.egg-info/
-dist/
-build/
-.worktrees/

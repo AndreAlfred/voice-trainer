@@ -22,6 +22,7 @@ Real-time voice analysis tool for classical singers.
 ### Build
 
 ```bash
+chmod +x build_app.sh   # only needed once after cloning
 ./build_app.sh
 ```
 
