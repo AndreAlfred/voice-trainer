@@ -20,7 +20,7 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont
 
 from audio.capture import AudioCapture
-from audio.analysis import compute_spectrogram_column, estimate_pitch
+from audio.analysis import compute_spectrogram_column, estimate_pitch, estimate_formants
 from ui.spectrogram import SpectrogramWidget
 from ui.pitch_display import PitchDisplayWidget
 
@@ -131,9 +131,11 @@ class MainWindow(QMainWindow):
             # --- Signal analysis ---
             spectrum_db = compute_spectrogram_column(window, SAMPLE_RATE, N_FFT)
             pitch_hz = estimate_pitch(window, SAMPLE_RATE)
+            f1_hz, f2_hz = estimate_formants(window, SAMPLE_RATE)
 
-            # Update spectrogram with this new column
+            # Update spectrogram with this new column and formant positions
             self._spectrogram.add_column(spectrum_db)
+            self._spectrogram.add_formants(f1_hz, f2_hz)
 
             # Keep track of most recent pitch estimate
             if pitch_hz is not None:
