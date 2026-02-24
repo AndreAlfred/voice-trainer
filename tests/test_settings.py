@@ -20,6 +20,11 @@ class TestAppSettings:
         assert s.singers_formant_visible is True
         assert s.background_color == (26, 26, 46)
 
+    def test_blur_sigma_default(self):
+        from ui.settings import AppSettings
+        s = AppSettings()
+        assert s.blur_sigma == 1.5
+
     def test_save_creates_file(self, tmp_path, monkeypatch):
         from ui import settings as m
         monkeypatch.setattr(m, "SETTINGS_DIR",  tmp_path)
