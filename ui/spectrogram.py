@@ -26,7 +26,7 @@ DISPLAY_DB_MAX = 0.0
 
 # Number of log-spaced display bins on the frequency axis.
 # More bins = smoother gradient but slightly more memory. 512 is a good balance.
-N_LOG_BINS = 512
+N_LOG_BINS = 1024
 
 
 class SpectrogramWidget(QWidget):
@@ -53,7 +53,7 @@ class SpectrogramWidget(QWidget):
         self.sample_rate = sample_rate
         self.n_fft = n_fft
 
-        # Log-spaced frequency grid: 512 bins from FREQ_MIN_HZ to FREQ_MAX_HZ.
+        # Log-spaced frequency grid: 1024 bins from FREQ_MIN_HZ to FREQ_MAX_HZ.
         # Each octave gets equal vertical space — this matches how the ear hears
         # and gives the 80–3200 Hz voice range ~80% of the display height instead
         # of the ~39% it gets with a linear scale.
@@ -65,16 +65,16 @@ class SpectrogramWidget(QWidget):
         )
         self._n_freq_bins = N_LOG_BINS
 
+        # Full FFT frequency array — used by np.interp in add_column()
+        self._fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
+
         # Pre-compute mapping: for each log display bin, the index of the nearest
-        # linear FFT bin. Built once at startup so add_column() is a fast index lookup.
-        _all_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate)
-        # searchsorted gives the insertion point (next-higher bin).
-        # Compare that bin and the one below it; keep whichever is closer in Hz.
-        _insert = np.searchsorted(_all_freqs, self._display_freqs)
-        _lower = np.clip(_insert - 1, 0, len(_all_freqs) - 1)
-        _upper = np.clip(_insert,     0, len(_all_freqs) - 1)
-        _dist_lower = np.abs(_all_freqs[_lower] - self._display_freqs)
-        _dist_upper = np.abs(_all_freqs[_upper] - self._display_freqs)
+        # linear FFT bin. Used only for formant scatter positioning (add_formants).
+        _insert = np.searchsorted(self._fft_freqs, self._display_freqs)
+        _lower = np.clip(_insert - 1, 0, len(self._fft_freqs) - 1)
+        _upper = np.clip(_insert,     0, len(self._fft_freqs) - 1)
+        _dist_lower = np.abs(self._fft_freqs[_lower] - self._display_freqs)
+        _dist_upper = np.abs(self._fft_freqs[_upper] - self._display_freqs)
         self._freq_indices = np.where(_dist_lower <= _dist_upper, _lower, _upper)
 
         # Time axis: number of columns = display_seconds * update_rate
@@ -209,8 +209,8 @@ class SpectrogramWidget(QWidget):
             spectrum_db: Full magnitude spectrum in dB, shape (n_fft//2+1,).
                          Produced by audio.analysis.compute_spectrogram_column().
         """
-        # Map the linear FFT spectrum onto the log-spaced display grid
-        display_col = spectrum_db[self._freq_indices]
+        # Interpolate the linear FFT spectrum onto the log-spaced display grid
+        display_col = np.interp(self._display_freqs, self._fft_freqs, spectrum_db)
 
         # Scroll the buffer left by one column and place the new column on the right
         self._buffer[:-1] = self._buffer[1:]

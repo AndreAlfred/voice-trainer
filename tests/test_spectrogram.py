@@ -50,7 +50,7 @@ class TestLogFrequencyScale:
             "Array may still be linear."
         )
 
-    def test_display_freqs_length_is_512(self, qt_app):
+    def test_display_freqs_length_matches_n_log_bins(self, qt_app):
         """Display grid should have exactly N_LOG_BINS bins."""
         from ui.spectrogram import SpectrogramWidget, N_LOG_BINS
         w = SpectrogramWidget()
@@ -80,6 +80,41 @@ class TestLogFrequencyScale:
         w = SpectrogramWidget()
         assert w._buffer.shape[1] == w._n_freq_bins, (
             f"Buffer shape {w._buffer.shape} doesn't match n_freq_bins={w._n_freq_bins}"
+        )
+
+
+class TestInterpolation:
+    """Verify linear interpolation replaces nearest-neighbor mapping."""
+
+    def test_n_log_bins_is_1024(self, qt_app):
+        """Display grid should now use 1024 bins."""
+        from ui.spectrogram import N_LOG_BINS
+        assert N_LOG_BINS == 1024
+
+    def test_fft_freqs_stored(self, qt_app):
+        """Widget should store _fft_freqs array for interpolation."""
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget()
+        assert hasattr(w, '_fft_freqs')
+        assert len(w._fft_freqs) == w.n_fft // 2 + 1
+
+    def test_add_column_produces_smooth_gradient(self, qt_app):
+        """A linearly ramping spectrum should produce a smooth (non-staircase)
+        display column after interpolation."""
+        import numpy as np
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget(n_fft=2048)
+        # Create a spectrum that ramps linearly from -60 to 0 across all bins
+        spectrum = np.linspace(-60.0, 0.0, 1025, dtype=np.float32)
+        w.add_column(spectrum)
+        col = w._buffer[-1]
+        # With interpolation, consecutive values should differ smoothly.
+        # Count unique values — nearest-neighbor would have many duplicates
+        # (dozens of display bins mapping to the same FFT bin), interpolation
+        # should produce mostly unique values.
+        unique_ratio = len(np.unique(np.round(col, 4))) / len(col)
+        assert unique_ratio > 0.8, (
+            f"Only {unique_ratio:.0%} unique values — still looks like nearest-neighbor"
         )
 
 
