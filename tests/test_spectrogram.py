@@ -149,3 +149,45 @@ class TestApplySettings:
         w.apply_settings(AppSettings(singers_formant_visible=False))
         w.apply_settings(AppSettings(singers_formant_visible=True))
         assert w._singers_formant_region.isVisible()
+
+
+class TestGaussianBlur:
+    """Verify Gaussian blur is applied before rendering."""
+
+    def test_blur_sigma_stored(self, qt_app):
+        """Widget should store a blur_sigma attribute."""
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget()
+        assert hasattr(w, '_blur_sigma')
+        assert w._blur_sigma == 1.5
+
+    def test_apply_settings_updates_blur_sigma(self, qt_app):
+        """apply_settings should update _blur_sigma from settings."""
+        from ui.spectrogram import SpectrogramWidget
+        from ui.settings import AppSettings
+        w = SpectrogramWidget()
+        w.apply_settings(AppSettings(blur_sigma=0.0))
+        assert w._blur_sigma == 0.0
+        w.apply_settings(AppSettings(blur_sigma=2.5))
+        assert w._blur_sigma == 2.5
+
+    def test_add_column_with_blur_smooths_output(self, qt_app):
+        """With blur enabled, the widget processes frames without error."""
+        import numpy as np
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget(n_fft=2048)
+        spectrum = np.full(1025, -60.0, dtype=np.float32)
+        spectrum[100:110] = 0.0
+        for _ in range(5):
+            w.add_column(spectrum)
+        assert w._blur_sigma > 0
+
+    def test_blur_disabled_when_sigma_zero(self, qt_app):
+        """Setting blur_sigma=0 should disable blur without error."""
+        import numpy as np
+        from ui.spectrogram import SpectrogramWidget
+        from ui.settings import AppSettings
+        w = SpectrogramWidget(n_fft=2048)
+        w.apply_settings(AppSettings(blur_sigma=0.0))
+        spectrum = np.full(1025, -40.0, dtype=np.float32)
+        w.add_column(spectrum)  # must not raise

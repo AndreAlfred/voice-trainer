@@ -11,6 +11,7 @@ voice including harmonics. Color uses the 'magma' colormap: dark purple
 """
 
 import numpy as np
+from scipy.ndimage import gaussian_filter
 import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
@@ -96,6 +97,9 @@ class SpectrogramWidget(QWidget):
         self._f2_bins = np.full(self._n_time_cols, np.nan, dtype=np.float32)
 
         self._setup_ui()
+
+        # Blur sigma for smooth topographic rendering (0 = disabled)
+        self._blur_sigma = 1.5
 
     def _setup_ui(self) -> None:
         """Build the pyqtgraph plot widget."""
@@ -218,7 +222,12 @@ class SpectrogramWidget(QWidget):
 
         # Update the image. pyqtgraph ImageItem interprets shape (x, y):
         # x = time (horizontal), y = frequency (vertical)
-        self._image_item.setImage(self._buffer, autoLevels=False)
+        # Apply Gaussian blur for smooth topographic rendering
+        if self._blur_sigma > 0:
+            smoothed = gaussian_filter(self._buffer, sigma=(1.0, self._blur_sigma))
+            self._image_item.setImage(smoothed, autoLevels=False)
+        else:
+            self._image_item.setImage(self._buffer, autoLevels=False)
 
     def add_formants(self, f1_hz: float | None, f2_hz: float | None) -> None:
         """Add new F1/F2 estimates and refresh the scatter display.
@@ -298,6 +307,9 @@ class SpectrogramWidget(QWidget):
         # Background
         r, g, b = settings.background_color
         self._plot.setBackground(f"#{r:02x}{g:02x}{b:02x}")
+
+        # Blur sigma
+        self._blur_sigma = getattr(settings, 'blur_sigma', 1.5)
 
         # Scroll buffer resize when display_seconds changes
         hop = self.n_fft // 2
