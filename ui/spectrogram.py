@@ -25,7 +25,7 @@ DISPLAY_DB_MIN = -60.0
 DISPLAY_DB_MAX = 0.0
 
 # Number of log-spaced display bins on the frequency axis.
-# More bins = smoother gradient but slightly more memory. 512 is a good balance.
+# More bins = smoother gradient but slightly more memory. 1024 with interpolation.
 N_LOG_BINS = 1024
 
 
