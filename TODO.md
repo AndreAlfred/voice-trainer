@@ -26,6 +26,8 @@ Try alternative color schemes for the spectrogram that maintain contrast between
 - [x] Custom colormap with visible floor (teal → orange → yellow, -60 dB floor)
 - [x] Singer's Formant highlight band (2,000–3,500 Hz, gold)
 - [x] F1/F2 vowel formant rolling dot overlay (blue/green)
+- [x] Visual customization sidebar (colormap presets, dB range, dot sizes, background, all persisted)
+- [x] Smooth topographic spectrogram (linear interpolation + Gaussian blur + 1024 log bins)
 
 ---
 
@@ -36,3 +38,4 @@ Try alternative color schemes for the spectrogram that maintain contrast between
 - Time-scale zoom (narrow/widen the scrolling window)
 - Session recording and playback
 - Reference overlays (compare against a recording)
+- Higher FFT resolution + overlap (n_fft 4096, 75% overlap) for even smoother raw spectral data
