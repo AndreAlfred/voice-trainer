@@ -42,3 +42,19 @@ class TestSettingsPanel:
         btn = ColorButton((100, 100, 100), "Test")
         btn.set_color((200, 50, 30))
         assert btn.color() == (200, 50, 30)
+
+    def test_blur_slider_exists(self, qt_app):
+        from ui.settings import AppSettings
+        from ui.settings_panel import SettingsPanel
+        panel = SettingsPanel(AppSettings())
+        assert hasattr(panel, '_blur_sl')
+
+    def test_blur_slider_emits_signal(self, qt_app):
+        from ui.settings import AppSettings
+        from ui.settings_panel import SettingsPanel
+        received = []
+        panel = SettingsPanel(AppSettings())
+        panel.settings_changed.connect(lambda s: received.append(s))
+        panel._blur_sl.value_changed.emit(2.0)
+        assert len(received) == 1
+        assert received[0].blur_sigma == 2.0

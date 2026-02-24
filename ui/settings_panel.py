@@ -11,6 +11,7 @@ Sections:
   Formant Dots  — F1 colour, F2 colour, dot size slider
   Overlays      — Singer's Formant band toggle
   Background    — background colour picker
+  Smoothing     — blur sigma slider
 """
 
 from __future__ import annotations
@@ -159,6 +160,7 @@ class SettingsPanel(QWidget):
             self._dots_section,
             self._overlays_section,
             self._background_section,
+            self._blur_section,
         ]:
             layout.addWidget(section())
             layout.addWidget(self._divider())
@@ -293,6 +295,19 @@ class SettingsPanel(QWidget):
         self._bg_btn.color_changed.connect(
             lambda c: self._set("background_color", c))
         lay.addWidget(self._bg_btn)
+        return w
+
+    def _blur_section(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0); lay.setSpacing(6)
+        lay.addWidget(self._header("Smoothing"))
+        self._blur_sl = LabeledSlider(
+            "Blur Sigma", 0.0, 4.0, 1.5, self._settings.blur_sigma,
+            decimals=1)
+        self._blur_sl.value_changed.connect(
+            lambda v: self._set("blur_sigma", v))
+        lay.addWidget(self._blur_sl)
         return w
 
     # ------------------------------------------------------------------
