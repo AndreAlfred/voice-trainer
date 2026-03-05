@@ -151,6 +151,41 @@ class TestApplySettings:
         assert w._singers_formant_region.isVisible()
 
 
+class TestMatplotlibColormap:
+    """Verify matplotlib colormap integration."""
+
+    def test_build_colormap_returns_pg_colormap(self, qt_app):
+        """_build_colormap should return a pyqtgraph ColorMap."""
+        import pyqtgraph as pg
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget()
+        cmap = w._build_colormap("inferno")
+        assert isinstance(cmap, pg.ColorMap)
+
+    def test_build_colormap_has_256_stops(self, qt_app):
+        """Colormap should be sampled at 256 points."""
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget()
+        cmap = w._build_colormap("inferno")
+        # pg.ColorMap stores positions; 256 sample points
+        assert len(cmap.pos) == 256
+
+    def test_build_colormap_invalid_falls_back_to_inferno(self, qt_app):
+        """Invalid colormap name should fall back to inferno without error."""
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget()
+        cmap = w._build_colormap("nonexistent_colormap_xyz")
+        assert cmap is not None
+
+    def test_apply_settings_with_colormap_name(self, qt_app):
+        """apply_settings should accept colormap_name and not raise."""
+        from ui.spectrogram import SpectrogramWidget
+        from ui.settings import AppSettings
+        w = SpectrogramWidget()
+        w.apply_settings(AppSettings(colormap_name="viridis"))
+        # Should not raise
+
+
 class TestGaussianBlur:
     """Verify Gaussian blur is applied before rendering."""
 

@@ -3,4 +3,5 @@ pyqtgraph
 sounddevice
 numpy
 scipy
+matplotlib
 pytest

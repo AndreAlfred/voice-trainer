@@ -15,6 +15,7 @@ from scipy.ndimage import gaussian_filter
 import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
+import matplotlib as mpl
 
 
 # Frequency range to display
@@ -117,17 +118,9 @@ class SpectrogramWidget(QWidget):
         self._image_item = pg.ImageItem()
         self._plot.addItem(self._image_item)
 
-        # Custom 3-stop colormap: dark teal → warm orange → pale yellow.
-        # Starts at a visible teal (not pure black) so quiet sounds always
-        # appear as a real color rather than near-invisible dark purple.
-        colormap = pg.ColorMap(
-            pos=np.array([0.0, 0.5, 1.0]),
-            color=np.array([
-                [ 13,  79,  82, 255],  # dark teal  — silence / very quiet
-                [212,  80,  10, 255],  # warm orange — moderate energy
-                [255, 240, 160, 255],  # pale yellow — loud / strong harmonics
-            ], dtype=np.uint8),
-        )
+        # Perceptually uniform colormap sampled at 256 points from matplotlib.
+        # Default is 'inferno': black → purple → red → orange → yellow.
+        colormap = self._build_colormap("inferno")
         self._image_item.setColorMap(colormap)
         self._image_item.setLevels([DISPLAY_DB_MIN, DISPLAY_DB_MAX])
 
@@ -203,6 +196,19 @@ class SpectrogramWidget(QWidget):
                         label = f"{hz / 1000:.1f}k Hz"
                     ticks.append((float(idx), label))
         return ticks
+
+    def _build_colormap(self, name: str) -> pg.ColorMap:
+        """Sample a matplotlib colormap at 256 points and return a pg.ColorMap.
+
+        Falls back to 'inferno' if the name is not found.
+        """
+        try:
+            mpl_cmap = mpl.colormaps[name]
+        except (KeyError, ValueError):
+            mpl_cmap = mpl.colormaps["inferno"]
+        positions = np.linspace(0.0, 1.0, 256)
+        colors = (mpl_cmap(positions) * 255).astype(np.uint8)
+        return pg.ColorMap(pos=positions, color=colors)
 
     def add_column(self, spectrum_db: np.ndarray) -> None:
         """Add a new spectrum column and refresh the display.
@@ -284,14 +290,8 @@ class SpectrogramWidget(QWidget):
         import pyqtgraph as pg
 
         # Colormap
-        colormap = pg.ColorMap(
-            pos=np.array([0.0, 0.5, 1.0]),
-            color=np.array([
-                list(settings.color_floor) + [255],
-                list(settings.color_mid)   + [255],
-                list(settings.color_peak)  + [255],
-            ], dtype=np.uint8),
-        )
+        colormap_name = getattr(settings, 'colormap_name', 'inferno')
+        colormap = self._build_colormap(colormap_name)
         self._image_item.setColorMap(colormap)
         self._image_item.setLevels([settings.db_floor, settings.db_ceiling])
 
