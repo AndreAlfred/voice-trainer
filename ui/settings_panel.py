@@ -5,7 +5,7 @@ SettingsPanel emits settings_changed(AppSettings) on every control change.
 MainWindow listens and applies updates live, then saves to disk.
 
 Sections:
-  Colormap      — 4 preset buttons + Floor / Mid / Peak colour pickers
+  Colormap      — 4 matplotlib colormap preset buttons
   Display Range — dB Floor and dB Ceiling sliders
   Scroll Window — display_seconds slider
   Formant Dots  — F1 colour, F2 colour, dot size slider
@@ -125,11 +125,11 @@ class SettingsPanel(QWidget):
 
     settings_changed = Signal(object)   # carries updated AppSettings
 
-    PRESETS: dict = {
-        "Voice": ((13, 79, 82),   (212, 80, 10),  (255, 240, 160)),
-        "Magma": ((13, 2, 33),    (166, 46, 0),   (253, 246, 178)),
-        "Ocean": ((5, 10, 46),    (0, 102, 255),  (255, 255, 255)),
-        "Ember": ((26, 5, 0),     (192, 57, 43),  (255, 179, 71)),
+    COLORMAP_PRESETS: dict = {
+        "Inferno":  "inferno",
+        "Viridis":  "viridis",
+        "Magma":    "magma",
+        "Terrain":  "gist_earth",
     }
 
     def __init__(self, settings: AppSettings, parent=None):
@@ -195,38 +195,37 @@ class SettingsPanel(QWidget):
 
         row = QHBoxLayout()
         row.setSpacing(3)
-        for name, (floor, mid, peak) in self.PRESETS.items():
-            btn = QPushButton(name)
+        self._preset_buttons: dict[str, QPushButton] = {}
+        for label, cmap_name in self.COLORMAP_PRESETS.items():
+            btn = QPushButton(label)
             btn.setFixedHeight(22)
-            btn.setStyleSheet("font-size: 10px; border-radius: 3px;")
             btn.clicked.connect(
-                lambda _, f=floor, m=mid, p=peak: self._apply_preset(f, m, p)
+                lambda _, name=cmap_name: self._select_colormap(name)
             )
+            self._preset_buttons[cmap_name] = btn
             row.addWidget(btn)
         lay.addLayout(row)
 
-        self._c_floor = ColorButton(self._settings.color_floor, "Floor")
-        self._c_mid   = ColorButton(self._settings.color_mid,   "Mid")
-        self._c_peak  = ColorButton(self._settings.color_peak,  "Peak")
-        self._c_floor.color_changed.connect(lambda c: self._set("color_floor", c))
-        self._c_mid.color_changed.connect(  lambda c: self._set("color_mid",   c))
-        self._c_peak.color_changed.connect( lambda c: self._set("color_peak",  c))
-
-        pickers = QHBoxLayout()
-        pickers.setSpacing(4)
-        for btn in (self._c_floor, self._c_mid, self._c_peak):
-            pickers.addWidget(btn)
-        lay.addLayout(pickers)
+        self._update_preset_highlight()
         return w
 
-    def _apply_preset(self, floor: tuple, mid: tuple, peak: tuple) -> None:
-        self._settings.color_floor = floor
-        self._settings.color_mid   = mid
-        self._settings.color_peak  = peak
-        self._c_floor.set_color(floor)
-        self._c_mid.set_color(mid)
-        self._c_peak.set_color(peak)
+    def _select_colormap(self, name: str) -> None:
+        self._settings.colormap_name = name
+        self._update_preset_highlight()
         self._emit()
+
+    def _update_preset_highlight(self) -> None:
+        active = self._settings.colormap_name
+        for cmap_name, btn in self._preset_buttons.items():
+            if cmap_name == active:
+                btn.setStyleSheet(
+                    "font-size: 10px; border-radius: 3px; "
+                    "border: 2px solid #c8c8d4; background-color: #2a2a4a;"
+                )
+            else:
+                btn.setStyleSheet(
+                    "font-size: 10px; border-radius: 3px;"
+                )
 
     def _db_section(self) -> QWidget:
         w = QWidget()
