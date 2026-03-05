@@ -16,10 +16,8 @@ SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 
 @dataclass
 class AppSettings:
-    # Colormap — three RGB tuples for the pyqtgraph ColorMap stops
-    color_floor: tuple = (13, 79, 82)        # dark teal   #0d4f52
-    color_mid:   tuple = (212, 80, 10)       # warm orange #d4500a
-    color_peak:  tuple = (255, 240, 160)     # pale yellow #fff0a0
+    # Matplotlib colormap name (e.g. "inferno", "viridis", "magma", "gist_earth")
+    colormap_name: str = "inferno"
 
     # dB display range
     db_floor:   float = -60.0
@@ -48,8 +46,7 @@ class AppSettings:
         try:
             with open(SETTINGS_FILE) as f:
                 data = json.load(f)
-            for key in ("color_floor", "color_mid", "color_peak",
-                        "f1_color", "f2_color", "background_color"):
+            for key in ("f1_color", "f2_color", "background_color"):
                 if key in data:
                     data[key] = tuple(data[key])
             valid = {k: v for k, v in data.items()

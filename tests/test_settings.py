@@ -8,9 +8,7 @@ class TestAppSettings:
     def test_defaults_are_correct(self):
         from ui.settings import AppSettings
         s = AppSettings()
-        assert s.color_floor == (13, 79, 82)
-        assert s.color_mid   == (212, 80, 10)
-        assert s.color_peak  == (255, 240, 160)
+        assert s.colormap_name == "inferno"
         assert s.db_floor    == -60.0
         assert s.db_ceiling  ==   0.0
         assert s.display_seconds == 8.0
@@ -19,6 +17,15 @@ class TestAppSettings:
         assert s.dot_size    == 4
         assert s.singers_formant_visible is True
         assert s.background_color == (26, 26, 46)
+
+    def test_colormap_name_default(self):
+        from ui.settings import AppSettings
+        s = AppSettings()
+        assert s.colormap_name == "inferno"
+
+    def test_no_color_floor_field(self):
+        from ui.settings import AppSettings
+        assert not hasattr(AppSettings(), 'color_floor')
 
     def test_blur_sigma_default(self):
         from ui.settings import AppSettings
