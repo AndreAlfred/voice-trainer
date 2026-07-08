@@ -14,6 +14,22 @@ from a solid spectrogram core.
 
 ---
 
+## ▶ Next up — start a work session here
+**Current focus: Goal 1a (fast, high-res spectrogram).** A fresh session should
+begin by building the **spectrogram benchmark harness** — the tool that measures
+FPS and glass-to-glass latency so we have a self-verifiable litmus to `/loop`
+against. Nothing else in Goal 1a can be looped until this measuring stick exists.
+
+1. **Build the benchmark harness** (feed known/synthetic audio, measure FPS +
+   latency at a given bin count). This is the first task.
+2. **Profile** the render pipeline; find the top bottleneck.
+3. **Loop:** optimize one bottleneck → re-measure → repeat until the litmus holds.
+
+**Litmus target:** sustain ≥ 30 FPS and ≤ 120 ms glass-to-glass latency at 2048
+log-frequency bins over a 30 s synthetic run, with `pytest tests/` green.
+
+---
+
 ## North Star Goal 1 — Beautiful
 
 ### 1a. High-resolution spectrogram without lag *(top priority)*
@@ -41,6 +57,9 @@ latency are in tension; the whole game is pushing both up together.
   judged by Andrew's eyes, not a metric. Run these as **iterate-with-checkpoints**:
   Claude produces a variation + screenshot, Andrew reacts, repeat. Not a clean
   autonomous loop.
+- **Inspiration:** Frutiger Aero / skeuomorphic reference images are collected at
+  `~/Desktop/passaggiatta/` (the hash-named `.jpg`s). Local only — review when
+  Goal 1b begins; do not commit them.
 
 Folds in existing item: **color-scheme exploration** (spectrogram palettes that
 keep quiet-sound contrast and stay legible under the gold Singer's Formant band).
@@ -63,16 +82,38 @@ resonance while often preserving the *perceived* vowel. E.g. a female voice on
 while the listener still reads "oo".
 
 ### Source materials
-1. **Vowel-modification chart** (the "graph behind the piano keys"): per
-   note/register and starting vowel, the recommended vowel-shape adjustment,
-   voice-type-specific. → **must be digitized** into a lookup model
-   (voice type × note × target vowel → prescribed modification).
+1. **Berton Coffin, *Chromatic Vowel Chart for Voice Building and Tone Placing***
+   (© 1979 / 1986; based on *The Sounds of Singing*, Scarecrow Press) — the "graph
+   behind the piano keys." A chromatic grid: **pitch** (columns, reference # 1–59,
+   Hz 98–2794) × **vowel family** (Front / Neutral / Back / Umlaut) × acoustical
+   "track" (register) → the recommended IPA vowel to sing, **color-coded by
+   resonance safety**: red = dangerously spread (avoid), yellow = open/bright,
+   green = safe resonance, blue = closed/low-energy. Separate **Male** and
+   **Female** charts, each transposed per voice type (Fach) by clef placement;
+   a side panel gives each vowel's first-resonance (F1) pitch.
+   → **digitize into our own dataset** (voice type × pitch × vowel family/track →
+   {target vowel, resonance rating}).
 2. **Kenneth Bozeman, *Practical Vocal Acoustics*** — the physics engine:
    F1/fo relationships, the passaggio "turning over" where fo crosses F1,
    open vs. closed timbre, the singer's-formant cluster, etc.
-   **IP note:** implement the *principles and physics* (not copyrightable) and
-   cite Bozeman; never reproduce the book's text or figures. (Same respect-for-IP
-   posture as the VoceVista rule in [CLAUDE.md](CLAUDE.md).)
+
+**Source assessment (2026-07-07, chart ingested):** The Coffin chart is
+**genuinely useful, not outdated.** Its two axes — sung pitch (Hz) and vowel/F1
+resonance — map *directly* onto what the app already measures (fo, F1), and its
+color code is a ready-made overlay for a "aim here / avoid here" display. Caveats:
+(a) Coffin's values are *approximations* — cross-check against modern measured
+formant data (e.g. Hillenbrand, Sundberg); (b) his terminology ("tracks", "organ
+pipe series", "super whistle") is idiosyncratic — translate to modern
+F1/harmonic language in the UI. Coffin supplies the empirical *what* (which vowel
+at which pitch); Bozeman supplies the *why* and lets us generalize from measured
+formants instead of a fixed table. Use Coffin as the v1 lookup source; Bozeman as
+the generalization/validation layer.
+
+**IP note (applies to both sources):** implement the *principles and physics*
+(not copyrightable), cite the authors, and **never commit the chart photos or a
+verbatim reproduction of either source** to this public repo. Build our own
+derived dataset. Chart photos live at `~/Desktop/passaggiatta/` (local only).
+(Same respect-for-IP posture as the VoceVista rule in [CLAUDE.md](CLAUDE.md).)
 
 ### Milestones (diagnostic → prescriptive, incremental)
 1. **Target-zone overlay** — given the current note + intended vowel + voice type,
