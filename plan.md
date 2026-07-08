@@ -6,9 +6,91 @@ granular, trackable work lives in **GitHub Issues**. See also
 (mistakes log).
 
 ## Vision
-Give classical singers real-time, visual feedback on their voice — pitch,
-resonance, and vowel formants — as a free, open desktop tool. Grow incrementally
-from a solid spectrogram core toward richer pedagogical features.
+Give classical singers real-time feedback on their voice that is both **beautiful
+to use** and **pedagogically prescriptive** — not just showing *what* the voice is
+doing (pitch, resonance, formants), but guiding *how* to adjust it, grounded in
+real bel canto vocal acoustics. A free, open desktop tool that grows incrementally
+from a solid spectrogram core.
+
+---
+
+## North Star Goal 1 — Beautiful
+
+### 1a. High-resolution spectrogram without lag *(top priority)*
+The visualization must be high-resolution **and** stay real-time. Resolution and
+latency are in tension; the whole game is pushing both up together.
+
+- **Approach:** profile before optimizing — measure where each frame's time goes
+  (FFT compute, interpolation, Gaussian blur, Qt paint) before changing anything.
+- **Likely levers:** scrolling ring-buffer rendering (append one column per hop
+  instead of recomputing the whole image); efficient FFT sizes; decoupled
+  capture/analysis/render threads; GPU-accelerated rendering (pyqtgraph OpenGL /
+  shaders); analysis resolution decoupled from display resolution.
+- **Loop suitability: EXCELLENT.** Objective, self-verifiable litmus (see
+  [How we work: looping](#how-we-work-looping)). Example target: *sustain ≥ 30 FPS
+  and ≤ 120 ms glass-to-glass latency at 2048 log-frequency bins over a 30 s
+  synthetic-audio run, with `pytest tests/` green.*
+
+### 1b. Fun, friendly, characterful UI *(secondary)*
+- **Aesthetic direction:** Frutiger Aero — glossy glass, translucency, aqua/water
+  and nature motifs, soft gradients, lens-glint highlights — with tasteful
+  **skeuomorphism** for character (physical-feeling knobs, dials, meters).
+- **Implementation note:** PySide6/Qt styling via QSS + custom-painted widgets;
+  skeuomorphic controls likely need custom `QWidget.paintEvent` work.
+- **Loop suitability: LOW (needs human taste).** "Cohesive and polished" is
+  judged by Andrew's eyes, not a metric. Run these as **iterate-with-checkpoints**:
+  Claude produces a variation + screenshot, Andrew reacts, repeat. Not a clean
+  autonomous loop.
+
+Folds in existing item: **color-scheme exploration** (spectrogram palettes that
+keep quiet-sound contrast and stay legible under the gold Singer's Formant band).
+
+---
+
+## North Star Goal 2 — Prescriptive (bel canto vocal science)
+
+Turn the tool from **diagnostic** ("here's your F1/F2") into **prescriptive**
+("for this note and vowel, modify toward *this* shape"). The measurement
+infrastructure already exists — live fo, F1, F2 — so this is mostly a
+domain-knowledge + UX problem, not a new-sensing problem.
+
+### The core idea: formant tuning / vowel modification
+As a singer ascends in pitch, the fundamental (fo) and its harmonics rise toward —
+and eventually past — the vocal tract's formants (esp. F1). Modifying the vowel
+(vocal-tract shape) keeps formants favorably related to harmonics, giving fuller
+resonance while often preserving the *perceived* vowel. E.g. a female voice on
+"oo" above ~C5 opening toward "uh" raises F1 to track fo, freeing the resonance
+while the listener still reads "oo".
+
+### Source materials
+1. **Vowel-modification chart** (the "graph behind the piano keys"): per
+   note/register and starting vowel, the recommended vowel-shape adjustment,
+   voice-type-specific. → **must be digitized** into a lookup model
+   (voice type × note × target vowel → prescribed modification).
+2. **Kenneth Bozeman, *Practical Vocal Acoustics*** — the physics engine:
+   F1/fo relationships, the passaggio "turning over" where fo crosses F1,
+   open vs. closed timbre, the singer's-formant cluster, etc.
+   **IP note:** implement the *principles and physics* (not copyrightable) and
+   cite Bozeman; never reproduce the book's text or figures. (Same respect-for-IP
+   posture as the VoceVista rule in [CLAUDE.md](CLAUDE.md).)
+
+### Milestones (diagnostic → prescriptive, incremental)
+1. **Target-zone overlay** — given the current note + intended vowel + voice type,
+   draw the *target* formant zones on the spectrogram so the singer sees where to
+   aim. (Extends the existing F1/F2 overlay.)
+2. **Live prescription** — compare measured (fo, F1, F2) to target and surface a
+   plain-language cue: "open toward 'uh'", "your F1 is below fo — raise it".
+3. **Voice-type profiles** — soprano/mezzo/tenor/baritone/bass presets that set
+   the right formant targets; later, estimate/assist voice-type selection.
+
+Folds in existing item: **IPA vowel display** (live (F1,F2) → nearest IPA vowel)
+becomes the readout layer that prescription builds on.
+
+- **Loop suitability: LOW (needs domain judgment).** Correctness of vocal-science
+  claims must be checked by Andrew (a trained singer) and against the sources —
+  not machine-verifiable. Build via **checkpoints**, not autonomous loops.
+
+---
 
 ## Current state (shipped)
 - Real-time scrolling spectrogram (80–8000 Hz, logarithmic frequency)
@@ -16,34 +98,48 @@ from a solid spectrogram core toward richer pedagogical features.
 - Custom colormap with a visible quiet-sound floor (−60 dB)
 - Singer's Formant highlight band (2,000–3,500 Hz)
 - F1/F2 formant rolling-dot overlay
-- Visual customization sidebar — colormap presets, dB range, dot sizes,
-  background — all persisted
+- Visual customization sidebar (colormap presets, dB range, dot sizes, background) — persisted
 - Smooth topographic rendering (linear interpolation + Gaussian blur, 1024 log bins)
 - Packaged as a macOS `.app` (PyInstaller)
 
-## Active roadmap (next up)
-1. **IPA vowel display** — map live (F1, F2) → nearest IPA vowel symbol and show
-   it in the UI, with confidence thresholding so it only appears when estimates
-   are stable. Reference: Peterson & Barney (1952) vowel formant data.
-2. **Color scheme exploration** — evaluate alternative spectrogram palettes that
-   preserve quiet-sound contrast (real color at the −60 dB floor) and stay
-   legible under the gold Singer's Formant band.
-
 ## Backlog (not yet designed)
 - Vibrato rate + extent tracking
-- Vowel-modification recommendations (F1/F2 + voice type)
-- Time-scale zoom for the scrolling window (narrow/widen)
+- Time-scale zoom for the scrolling window
 - Session recording + playback
 - Reference overlays (compare against a recording)
-- Higher FFT resolution/overlap (n_fft 4096, 75% overlap)
+- Higher FFT resolution/overlap (n_fft 4096, 75% overlap) — supports Goal 1a
+
+## How we work: looping
+We use `/loop` to iterate autonomously toward a goal. A loop is only as good as
+its **litmus** — the test that lets the *looping agent* decide "done" without
+Andrew in the room. Principles:
+- **Clear goal:** one unambiguous definition of done per loop.
+- **Self-verifiable litmus:** a metric Claude can measure itself — FPS, latency
+  (ms), bin count, `pytest` green, no dropped frames over N seconds.
+- **Bounded iteration:** each pass makes one measurable improvement, then re-checks.
+- **Termination + escalation:** stop when the litmus is met; escalate to Andrew
+  when stuck or when the next step needs human judgment.
+
+**Rule of thumb:** if judging "done" requires Andrew's eyes, ears, or taste, it is
+*not* a clean loop — it's iterate-with-checkpoints. Good loop targets here:
+Goal 1a (spectrogram performance). Poor loop targets: Goal 1b (UI aesthetics) and
+Goal 2 (vocal-science correctness).
 
 ## How we track work
 - **This file** = the map: vision, priorities, what's done.
-- **GitHub Issues** = the granular units for each roadmap item (one issue per feature).
-- **docs/plans/** = detailed design + implementation docs, per feature (historical and active).
+- **GitHub Issues** = the granular units for each roadmap item.
+- **docs/plans/** = detailed design + implementation docs, per feature.
+
+## Open questions (to resolve with Andrew)
+- Goal 1a: what's the *current* FPS/latency and where's the bottleneck? (profile first)
+- Goal 1b: any Frutiger Aero reference images to anchor the look?
+- Goal 2: is the vowel-modification chart available to digitize (image/data), and
+  which voice type(s) does it cover? What voice type(s) do we target first?
+- Goal 2: which Bozeman principle is the highest-value first implementation
+  (F1/fo crossing feedback is a strong candidate)?
 
 ## Working agreement (learning goals)
-This project doubles as a place to build professional developer habits. Favor:
-branches + pull requests over direct commits to `main`, Conventional Commit
-messages, tests kept green, and capturing every wrong turn in
-[Lessons.md](Lessons.md).
+This project doubles as a place to build professional developer habits and to
+learn `/loop`. Favor: branches + pull requests over direct commits, Conventional
+Commit messages, tests kept green, wrong turns captured in [Lessons.md](Lessons.md),
+and loops built around self-verifiable litmus tests.
