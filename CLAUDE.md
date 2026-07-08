@@ -9,6 +9,8 @@ spectrogram with live pitch and formant (F1/F2) tracking. Desktop app for macOS.
   and our conventions evolve.
 - **[plan.md](plan.md)** — the master spec + roadmap: what we're building and
   why, what's shipped, what's next. Update when goals or priorities change.
+  **To start a work session, read its `▶ Next up` section first** — it names the
+  next concrete task so a fresh session can begin without re-planning.
 - **[Lessons.md](Lessons.md)** — running log of wrong turns and mistakes so we
   don't repeat them. Prune stale entries; when a lesson proves durable, promote
   it into this file as a standing rule.
@@ -19,6 +21,10 @@ spectrogram with live pitch and formant (F1/F2) tracking. Desktop app for macOS.
   describe the inspiration generically ("professional voice-analysis software")
   if it must be described at all. The repo is public — history and messages are
   world-readable.
+- **Never commit copyrighted source material** — e.g. the Berton Coffin vowel-chart
+  photos or Kenneth Bozeman's *Practical Vocal Acoustics* text. Implement the
+  underlying acoustics, cite the authors, and keep source scans out of the repo
+  (they live at `~/Desktop/passaggiatta/`, local only). See [plan.md](plan.md) Goal 2.
 
 ## Stack
 - Python 3, PySide6 (Qt), pyqtgraph, numpy, scipy, matplotlib
