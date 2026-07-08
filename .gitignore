@@ -16,3 +16,6 @@ venv/
 
 # Git worktrees
 .worktrees/
+
+# Claude Code local settings (machine-specific permissions — never commit)
+.claude/settings.local.json
