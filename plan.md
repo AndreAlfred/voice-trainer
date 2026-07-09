@@ -22,21 +22,27 @@ latency at a configurable bin count/FFT size.
 
 1. ~~Build the benchmark harness~~ — done. Run with
    `python -m tools.benchmark_spectrogram --bins 2048 --duration 30`.
-2. **Profile** the render pipeline; find the top bottleneck. **Baseline
-   (2026-07-08, this machine, offscreen Qt):** at 2048 bins / 30 s synthetic
-   audio, ~97 FPS, ~0 ms steady-state latency — comfortably passes the litmus
-   in this synthetic single-process harness. Short warm-up runs show latency
-   spikes up to ~127 ms in the first second (cold caches / Qt font init), which
-   is worth profiling next. Open question: does this harness fully capture
-   real glass-to-glass cost (actual GPU compositing, live mic capture jitter,
-   the 16ms UI QTimer), or only pipeline throughput? May need a second,
-   on-screen (non-offscreen) run to sanity-check before declaring 1a "fast
-   enough."
-3. **Loop:** optimize one bottleneck → re-measure → repeat until the litmus
-   holds under realistic conditions, not just the synthetic offscreen harness.
+2. **Baseline measured — the litmus is already met at current settings.**
+   Harness (2026-07-08, offscreen Qt): at 2048 bins / 30 s synthetic audio,
+   ~97 FPS, ~0 ms steady-state latency. Short warm-up runs spike to ~127 ms in
+   the first second (cold caches / Qt font init), but steady state is clean.
+   **Human confirmation (2026-07-08):** Andrew ran the live app and sang/clapped
+   into it — real mic, real screen compositing, the two stages the harness
+   can't see — and it "feels nice and fast," no perceptible glass-to-glass lag.
+   The synthetic proxy and the human test agree, so the harness is trustworthy
+   as a self-verifiable litmus and regression guard. **Open question from before
+   — "does the offscreen harness capture real glass-to-glass cost?" — resolved:
+   close enough; the human test corroborates it.**
+3. **Don't optimize a non-problem.** There is no lag to fix at the current
+   config, so profiling-then-looping to *reduce* latency would be motion, not
+   progress. The live perf lever now is the *other* half of Goal 1a —
+   **resolution**: push bins / FFT size / overlap up and use the harness to
+   keep latency honest as we do. That is a clean autonomous loop; reducing
+   already-fine latency is not.
 
 **Litmus target:** sustain ≥ 30 FPS and ≤ 120 ms glass-to-glass latency at 2048
 log-frequency bins over a 30 s synthetic run, with `pytest tests/` green.
+**Status: MET** at 2048 bins (synthetic + human-confirmed, 2026-07-08).
 
 ---
 
