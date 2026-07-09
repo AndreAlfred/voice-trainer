@@ -30,7 +30,8 @@ class TestSettingsPanel:
         from ui.settings_panel import SettingsPanel
         panel = SettingsPanel(AppSettings())
         assert hasattr(panel, '_preset_buttons')
-        assert len(panel._preset_buttons) == 4
+        assert len(panel._preset_buttons) == 5
+        assert "manuscript" in panel._preset_buttons
 
     def test_selecting_preset_emits_signal(self, qt_app):
         from ui.settings import AppSettings

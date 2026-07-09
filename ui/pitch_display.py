@@ -14,6 +14,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
 from audio.analysis import hz_to_note_name
+from ui import theme
 
 
 class PitchDisplayWidget(QWidget):
@@ -23,15 +24,19 @@ class PitchDisplayWidget(QWidget):
         parent: Parent QWidget, or None for a top-level widget.
     """
 
-    # Colors
-    _COLOR_ACTIVE = "#f0e68c"    # warm yellow when voice is detected
-    _COLOR_SILENT = "#555566"    # muted when silent
-    _BG_COLOR = "#0d0d1a"        # slightly lighter than spectrogram bg
+    # Colors — vermillion "rubrication" when a pitch is live, faded ink
+    # when silent, on a raised parchment panel.
+    _COLOR_ACTIVE = theme.VERMILLION
+    _COLOR_SILENT = theme.SEPIA_FAINT
+    _BG_COLOR = theme.PARCHMENT_LIGHT
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setFixedHeight(72)
-        self.setStyleSheet(f"background-color: {self._BG_COLOR};")
+        self.setStyleSheet(
+            f"background-color: {self._BG_COLOR}; "
+            f"border-top: 1px solid {theme.UMBER};"
+        )
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -41,7 +46,7 @@ class PitchDisplayWidget(QWidget):
 
         # Note name label (large, prominent)
         self._note_label = QLabel("—")
-        note_font = QFont("Courier", 28, QFont.Weight.Bold)
+        note_font = QFont(theme.SERIF_FAMILY, 30, QFont.Weight.Bold)
         self._note_label.setFont(note_font)
         self._note_label.setStyleSheet(f"color: {self._COLOR_SILENT};")
         self._note_label.setFixedWidth(100)
@@ -49,7 +54,8 @@ class PitchDisplayWidget(QWidget):
 
         # Frequency label (smaller)
         self._freq_label = QLabel("No pitch detected")
-        freq_font = QFont("Courier", 16)
+        freq_font = QFont(theme.SERIF_FAMILY, 16)
+        freq_font.setItalic(True)
         self._freq_label.setFont(freq_font)
         self._freq_label.setStyleSheet(f"color: {self._COLOR_SILENT};")
 

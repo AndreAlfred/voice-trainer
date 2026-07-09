@@ -15,6 +15,7 @@ from PySide6.QtGui import QFont, QAction
 
 from audio.capture import AudioCapture
 from audio.analysis import compute_spectrogram_column, estimate_pitch, estimate_formants
+from ui import theme
 from ui.settings import AppSettings
 from ui.settings_panel import SettingsPanel
 from ui.spectrogram import SpectrogramWidget
@@ -36,8 +37,7 @@ class MainWindow(QMainWindow):
         self.resize(1100, 650)
 
         self._settings = AppSettings.load()
-        r, g, b = self._settings.background_color
-        self.setStyleSheet(f"background-color: rgb({r},{g},{b});")
+        self.setStyleSheet(theme.APP_STYLESHEET)
 
         self._capture = AudioCapture(sample_rate=SAMPLE_RATE, block_size=BLOCK_SIZE)
         self._audio_buffer = np.zeros(0, dtype=np.float32)
@@ -58,12 +58,13 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        title = QLabel("VOICE TRAINER")
-        title.setFont(QFont("Courier", 11))
+        title = QLabel("· VOICE TRAINER ·")
+        title.setFont(QFont(theme.SERIF_FAMILY, 13))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFixedHeight(30)
+        title.setFixedHeight(32)
         title.setStyleSheet(
-            "color: #666688; background-color: #0d0d1a; letter-spacing: 4px;"
+            f"color: {theme.ULTRAMARINE}; background-color: {theme.PARCHMENT_LIGHT}; "
+            f"letter-spacing: 5px; border-bottom: 1px solid {theme.UMBER};"
         )
         layout.addWidget(title)
 
@@ -102,8 +103,8 @@ class MainWindow(QMainWindow):
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
 
     def _on_settings_changed(self, settings: AppSettings) -> None:
-        r, g, b = settings.background_color
-        self.setStyleSheet(f"background-color: rgb({r},{g},{b});")
+        # background_color applies to the spectrogram plot (inside
+        # apply_settings); the window chrome keeps the theme stylesheet.
         self._spectrogram.apply_settings(settings)
 
     def _process_audio(self) -> None:

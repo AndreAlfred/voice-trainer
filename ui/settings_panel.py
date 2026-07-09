@@ -24,6 +24,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QColorDialog
 
+from ui import theme
 from ui.settings import AppSettings
 
 
@@ -53,7 +54,7 @@ class ColorButton(QPushButton):
         text = "black" if (r + g + b) > 380 else "white"
         self.setStyleSheet(
             f"background-color: rgb({r},{g},{b}); color: {text}; "
-            f"border: 1px solid #444466; border-radius: 3px;"
+            f"border: 1px solid {theme.UMBER}; border-radius: 3px;"
         )
 
     def _pick(self) -> None:
@@ -84,7 +85,7 @@ class LabeledSlider(QWidget):
         top.addWidget(QLabel(label))
         top.addStretch()
         self._val_lbl = QLabel(self._fmt(current_val))
-        self._val_lbl.setStyleSheet("color: #c8c8d4;")
+        self._val_lbl.setStyleSheet(f"color: {theme.ULTRAMARINE};")
         top.addWidget(self._val_lbl)
         layout.addLayout(top)
 
@@ -96,7 +97,7 @@ class LabeledSlider(QWidget):
         layout.addWidget(self._slider)
 
         hint = QLabel(f"default: {self._fmt(default_val)}")
-        hint.setStyleSheet("color: #555577; font-size: 10px;")
+        hint.setStyleSheet(f"color: {theme.SEPIA_FAINT}; font-size: 10px;")
         layout.addWidget(hint)
 
     def _fmt(self, val: float) -> str:
@@ -126,6 +127,7 @@ class SettingsPanel(QWidget):
     settings_changed = Signal(object)   # carries updated AppSettings
 
     COLORMAP_PRESETS: dict = {
+        "Script":   theme.MANUSCRIPT_CMAP_NAME,
         "Inferno":  "inferno",
         "Viridis":  "viridis",
         "Magma":    "magma",
@@ -174,7 +176,7 @@ class SettingsPanel(QWidget):
     def _divider(self) -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.Shape.HLine)
-        f.setStyleSheet("color: #2a2a4a;")
+        f.setStyleSheet(f"color: {theme.UMBER};")
         return f
 
     def _header(self, text: str) -> QLabel:
@@ -183,7 +185,7 @@ class SettingsPanel(QWidget):
         font.setBold(True)
         font.setPointSize(9)
         lbl.setFont(font)
-        lbl.setStyleSheet("color: #888aaa; letter-spacing: 1px;")
+        lbl.setStyleSheet(f"color: {theme.ULTRAMARINE}; letter-spacing: 1px;")
         return lbl
 
     def _colormap_section(self) -> QWidget:
@@ -220,7 +222,9 @@ class SettingsPanel(QWidget):
             if cmap_name == active:
                 btn.setStyleSheet(
                     "font-size: 10px; border-radius: 3px; "
-                    "border: 2px solid #c8c8d4; background-color: #2a2a4a;"
+                    f"border: 2px solid {theme.ULTRAMARINE}; "
+                    f"background-color: {theme.PARCHMENT_DARK}; "
+                    f"color: {theme.ULTRAMARINE};"
                 )
             else:
                 btn.setStyleSheet(
