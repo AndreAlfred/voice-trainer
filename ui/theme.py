@@ -1,17 +1,14 @@
 """
-ui/theme.py — Renaissance visual theme: palette, fonts, stylesheet, colormap.
+ui/theme.py — Renaissance visual theme for the window chrome.
 
-Single source of truth for the app's look. The palette draws on renaissance
-manuscript pigments: parchment grounds, sepia ink, ultramarine (lapis),
-vermillion, and gold-leaf ochre.
+Single source of truth for the look of everything AROUND the spectrogram:
+toolbar, title, pitch readout, settings panel. The palette draws on
+renaissance manuscript pigments: parchment grounds, sepia ink, ultramarine
+(lapis), vermillion, and gold-leaf ochre.
 
-Importing this module registers the custom "manuscript" matplotlib colormap
-(parchment -> ochre -> vermillion -> ultramarine ink), so any code that looks
-up colormaps by name must import ui.theme first.
+The spectrogram plot itself (colormap, formant dots, overlays) is styled
+independently in ui/spectrogram.py and via AppSettings — not here.
 """
-
-import matplotlib as mpl
-from matplotlib.colors import LinearSegmentedColormap
 
 # ---------------------------------------------------------------------------
 # Palette — renaissance pigments
@@ -23,45 +20,13 @@ PARCHMENT_DARK  = "#e4d5b7"   # recessed areas, hover states
 UMBER           = "#8a6f47"   # raw umber — borders and frames
 SEPIA           = "#3b2f1e"   # ink — primary text
 SEPIA_FAINT     = "#9c8a6a"   # faded ink — secondary text, silence
-ULTRAMARINE     = "#274690"   # lapis lazuli — headers, F2, emphasis
-VERMILLION      = "#c8371f"   # rubrication red — F1, active highlights
-GOLD            = "#c9a227"   # gold leaf — singer's formant band
-TERRACOTTA      = "#b0623c"   # earth accent
-
-# As (r, g, b) tuples for AppSettings / pyqtgraph brushes
-PARCHMENT_RGB   = (242, 232, 213)
-ULTRAMARINE_RGB = (39, 70, 144)
-VERMILLION_RGB  = (200, 55, 31)
-GOLD_RGB        = (201, 162, 39)
+ULTRAMARINE     = "#274690"   # lapis lazuli — headers, emphasis
+VERMILLION      = "#c8371f"   # rubrication red — active highlights
+GOLD            = "#c9a227"   # gold leaf — slider accents
 
 # Palatino ships with macOS and is named for Giambattista Palatino,
 # a 16th-century calligrapher — the most renaissance font a Mac has.
 SERIF_FAMILY = "Palatino"
-
-# ---------------------------------------------------------------------------
-# "manuscript" colormap — ink density on parchment
-# ---------------------------------------------------------------------------
-# Quiet = bare parchment, louder = ochre -> vermillion, loudest = dark
-# ultramarine ink. Lightness falls monotonically across the ramp, so
-# amplitude ordering stays readable even though the hue shifts.
-
-MANUSCRIPT_CMAP_NAME = "manuscript"
-
-_MANUSCRIPT_STOPS = [
-    (0.00, "#f5edda"),   # parchment
-    (0.25, "#e3c78f"),   # pale ochre
-    (0.45, "#c9973b"),   # gold ochre
-    (0.65, "#b4451f"),   # vermillion
-    (0.82, "#71281c"),   # deep madder
-    (1.00, "#1e2a52"),   # ultramarine ink
-]
-
-if MANUSCRIPT_CMAP_NAME not in mpl.colormaps:
-    mpl.colormaps.register(
-        LinearSegmentedColormap.from_list(
-            MANUSCRIPT_CMAP_NAME, _MANUSCRIPT_STOPS, N=256
-        )
-    )
 
 # ---------------------------------------------------------------------------
 # Application stylesheet

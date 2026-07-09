@@ -8,20 +8,20 @@ class TestAppSettings:
     def test_defaults_are_correct(self):
         from ui.settings import AppSettings
         s = AppSettings()
-        assert s.colormap_name == "manuscript"
+        assert s.colormap_name == "inferno"
         assert s.db_floor    == -60.0
         assert s.db_ceiling  ==   0.0
         assert s.display_seconds == 8.0
-        assert s.f1_color    == (200, 55, 31)    # vermillion
-        assert s.f2_color    == (39, 70, 144)    # ultramarine
+        assert s.f1_color    == (100, 180, 255)
+        assert s.f2_color    == (80, 240, 120)
         assert s.dot_size    == 4
         assert s.singers_formant_visible is True
-        assert s.background_color == (242, 232, 213)  # parchment
+        assert s.background_color == (26, 26, 46)
 
     def test_colormap_name_default(self):
         from ui.settings import AppSettings
         s = AppSettings()
-        assert s.colormap_name == "manuscript"
+        assert s.colormap_name == "inferno"
 
     def test_no_color_floor_field(self):
         from ui.settings import AppSettings

@@ -6,9 +6,8 @@ spectra as a color image (time on the x-axis, frequency on the y-axis).
 The display updates when add_column() is called with a new spectrum array.
 
 The display range is 80–8000 Hz, which covers the full classical singing
-voice including harmonics. Color defaults to the 'manuscript' colormap
-(registered by ui.theme): parchment = quiet, ochre/vermillion = moderate,
-dark ultramarine ink = loud.
+voice including harmonics. Color uses the 'magma' colormap: dark purple
+= quiet, red = moderate, yellow/white = loud.
 """
 
 import numpy as np
@@ -17,8 +16,6 @@ import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
 import matplotlib as mpl
-
-from ui import theme
 
 
 # Frequency range to display
@@ -110,9 +107,9 @@ class SpectrogramWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Parchment ground with sepia-ink axes
-        pg.setConfigOption('background', theme.PARCHMENT)
-        pg.setConfigOption('foreground', theme.SEPIA)
+        # Use dark background throughout
+        pg.setConfigOption('background', '#1a1a2e')
+        pg.setConfigOption('foreground', '#c8c8d4')
 
         self._plot = pg.PlotWidget()
         layout.addWidget(self._plot)
@@ -121,9 +118,9 @@ class SpectrogramWidget(QWidget):
         self._image_item = pg.ImageItem()
         self._plot.addItem(self._image_item)
 
-        # Colormap sampled at 256 points from matplotlib. Default is
-        # 'manuscript': parchment → ochre → vermillion → ultramarine ink.
-        colormap = self._build_colormap(theme.MANUSCRIPT_CMAP_NAME)
+        # Perceptually uniform colormap sampled at 256 points from matplotlib.
+        # Default is 'inferno': black → purple → red → orange → yellow.
+        colormap = self._build_colormap("inferno")
         self._image_item.setColorMap(colormap)
         self._image_item.setLevels([DISPLAY_DB_MIN, DISPLAY_DB_MAX])
 
@@ -156,32 +153,28 @@ class SpectrogramWidget(QWidget):
             values=[f_lo_bin, f_hi_bin],
             orientation='horizontal',   # horizontal = bounded by y-axis range
             movable=False,
-            brush=pg.mkBrush(*theme.GOLD_RGB, 40),    # faint gold-leaf wash
-            pen=pg.mkPen(*theme.GOLD_RGB, 120),       # slightly more visible border
+            brush=pg.mkBrush(255, 215, 0, 22),   # very faint gold fill
+            pen=pg.mkPen(255, 215, 0, 60),        # slightly more visible border
         )
         self._plot.addItem(self._singers_formant_region)
 
-        # Label anchored to the top-left corner of the band; darkened gold
-        # so it stays legible against the parchment ground
+        # Label anchored to the top-left corner of the band
         formant_label = pg.TextItem(
-            "Singer's Formant", color=(150, 118, 25, 200), anchor=(0, 1))
+            "Singer's Formant", color=(255, 215, 0, 140), anchor=(0, 1))
         formant_label.setPos(0, f_hi_bin)
         self._plot.addItem(formant_label)
 
-        # F1 (vermillion) and F2 (ultramarine) formant scatter overlays.
+        # F1 (light blue) and F2 (bright green) formant scatter overlays.
         # These dots scroll with the spectrogram and show vowel formant history.
-        # A thin parchment outline lifts the dots off the ink field, which
-        # matters for F1: vermillion camouflages into the colormap's own reds.
-        dot_outline = pg.mkPen(theme.PARCHMENT_LIGHT, width=1)
         self._f1_scatter = pg.ScatterPlotItem(
             size=4,
-            pen=dot_outline,
-            brush=pg.mkBrush(*theme.VERMILLION_RGB, 200),
+            pen=None,
+            brush=pg.mkBrush(100, 180, 255, 200),   # light blue
         )
         self._f2_scatter = pg.ScatterPlotItem(
             size=4,
-            pen=dot_outline,
-            brush=pg.mkBrush(*theme.ULTRAMARINE_RGB, 200),
+            pen=None,
+            brush=pg.mkBrush(80, 240, 120, 200),    # bright green
         )
         self._plot.addItem(self._f1_scatter)
         self._plot.addItem(self._f2_scatter)
@@ -207,12 +200,12 @@ class SpectrogramWidget(QWidget):
     def _build_colormap(self, name: str) -> pg.ColorMap:
         """Sample a matplotlib colormap at 256 points and return a pg.ColorMap.
 
-        Falls back to the 'manuscript' theme colormap if the name is not found.
+        Falls back to 'inferno' if the name is not found.
         """
         try:
             mpl_cmap = mpl.colormaps[name]
         except (KeyError, ValueError):
-            mpl_cmap = mpl.colormaps[theme.MANUSCRIPT_CMAP_NAME]
+            mpl_cmap = mpl.colormaps["inferno"]
         positions = np.linspace(0.0, 1.0, 256)
         colors = (mpl_cmap(positions) * 255).astype(np.uint8)
         return pg.ColorMap(pos=positions, color=colors)

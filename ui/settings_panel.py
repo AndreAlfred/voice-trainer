@@ -127,7 +127,6 @@ class SettingsPanel(QWidget):
     settings_changed = Signal(object)   # carries updated AppSettings
 
     COLORMAP_PRESETS: dict = {
-        "Script":   theme.MANUSCRIPT_CMAP_NAME,
         "Inferno":  "inferno",
         "Viridis":  "viridis",
         "Magma":    "magma",

@@ -16,9 +16,8 @@ SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 
 @dataclass
 class AppSettings:
-    # Matplotlib colormap name ("manuscript" is registered by ui.theme;
-    # standard names like "inferno" / "viridis" also work)
-    colormap_name: str = "manuscript"
+    # Matplotlib colormap name (e.g. "inferno", "viridis", "magma", "gist_earth")
+    colormap_name: str = "inferno"
 
     # dB display range
     db_floor:   float = -60.0
@@ -28,15 +27,15 @@ class AppSettings:
     display_seconds: float = 8.0
 
     # Formant dot appearance
-    f1_color: tuple = (200, 55, 31)    # vermillion
-    f2_color: tuple = (39, 70, 144)    # ultramarine
+    f1_color: tuple = (100, 180, 255)   # light blue
+    f2_color: tuple = (80,  240, 120)   # bright green
     dot_size:   int = 4
 
     # Overlay visibility
     singers_formant_visible: bool = True
 
-    # Window / plot background
-    background_color: tuple = (242, 232, 213)  # parchment #f2e8d5
+    # Spectrogram plot background
+    background_color: tuple = (26, 26, 46)  # #1a1a2e
 
     # Blur sigma for spectrogram smoothing (0 = disabled)
     blur_sigma: float = 1.5

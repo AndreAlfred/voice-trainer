@@ -170,22 +170,12 @@ class TestMatplotlibColormap:
         # pg.ColorMap stores positions; 256 sample points
         assert len(cmap.pos) == 256
 
-    def test_build_colormap_invalid_falls_back_to_default(self, qt_app):
-        """Invalid colormap name should fall back to the theme default."""
+    def test_build_colormap_invalid_falls_back_to_inferno(self, qt_app):
+        """Invalid colormap name should fall back to inferno without error."""
         from ui.spectrogram import SpectrogramWidget
         w = SpectrogramWidget()
         cmap = w._build_colormap("nonexistent_colormap_xyz")
         assert cmap is not None
-
-    def test_manuscript_colormap_registered(self, qt_app):
-        """ui.theme should register the 'manuscript' colormap with matplotlib."""
-        import matplotlib as mpl
-        import pyqtgraph as pg
-        from ui.spectrogram import SpectrogramWidget
-        assert "manuscript" in mpl.colormaps
-        w = SpectrogramWidget()
-        cmap = w._build_colormap("manuscript")
-        assert isinstance(cmap, pg.ColorMap)
 
     def test_apply_settings_with_colormap_name(self, qt_app):
         """apply_settings should accept colormap_name and not raise."""
