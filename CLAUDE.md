@@ -47,6 +47,9 @@ First-time setup: `brew install portaudio`, then `pip install -r requirements.tx
 - `ui/pitch_display.py` — pitch readout widget
 - `ui/app.py`         — main window; wires widgets and settings together
 - `main.py`           — entry point
+- `tools/benchmark_spectrogram.py` — perf litmus harness (FPS + glass-to-glass
+  latency at a given bin count) for the Goal 1a loop. Run via
+  `python -m tools.benchmark_spectrogram --bins 2048 --duration 30`.
 - Visual settings (colormap, dB range, dot sizes, background) persist via `AppSettings`.
 
 ## Conventions

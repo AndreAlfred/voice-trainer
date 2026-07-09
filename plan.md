@@ -15,15 +15,25 @@ from a solid spectrogram core.
 ---
 
 ## ▶ Next up — start a work session here
-**Current focus: Goal 1a (fast, high-res spectrogram).** A fresh session should
-begin by building the **spectrogram benchmark harness** — the tool that measures
-FPS and glass-to-glass latency so we have a self-verifiable litmus to `/loop`
-against. Nothing else in Goal 1a can be looped until this measuring stick exists.
+**Current focus: Goal 1a (fast, high-res spectrogram).** The benchmark harness
+(issue #4) is built: `tools/benchmark_spectrogram.py` feeds synthetic sung-voice
+audio through the real analysis + render pipeline and reports FPS + glass-to-glass
+latency at a configurable bin count/FFT size.
 
-1. **Build the benchmark harness** (feed known/synthetic audio, measure FPS +
-   latency at a given bin count). This is the first task.
-2. **Profile** the render pipeline; find the top bottleneck.
-3. **Loop:** optimize one bottleneck → re-measure → repeat until the litmus holds.
+1. ~~Build the benchmark harness~~ — done. Run with
+   `python -m tools.benchmark_spectrogram --bins 2048 --duration 30`.
+2. **Profile** the render pipeline; find the top bottleneck. **Baseline
+   (2026-07-08, this machine, offscreen Qt):** at 2048 bins / 30 s synthetic
+   audio, ~97 FPS, ~0 ms steady-state latency — comfortably passes the litmus
+   in this synthetic single-process harness. Short warm-up runs show latency
+   spikes up to ~127 ms in the first second (cold caches / Qt font init), which
+   is worth profiling next. Open question: does this harness fully capture
+   real glass-to-glass cost (actual GPU compositing, live mic capture jitter,
+   the 16ms UI QTimer), or only pipeline throughput? May need a second,
+   on-screen (non-offscreen) run to sanity-check before declaring 1a "fast
+   enough."
+3. **Loop:** optimize one bottleneck → re-measure → repeat until the litmus
+   holds under realistic conditions, not just the synthetic offscreen harness.
 
 **Litmus target:** sustain ≥ 30 FPS and ≤ 120 ms glass-to-glass latency at 2048
 log-frequency bins over a 30 s synthetic run, with `pytest tests/` green.

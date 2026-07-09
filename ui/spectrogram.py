@@ -48,6 +48,7 @@ class SpectrogramWidget(QWidget):
         sample_rate: int = 44100,
         n_fft: int = 2048,
         display_seconds: float = 8.0,
+        n_log_bins: int = N_LOG_BINS,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -55,17 +56,17 @@ class SpectrogramWidget(QWidget):
         self.sample_rate = sample_rate
         self.n_fft = n_fft
 
-        # Log-spaced frequency grid: 1024 bins from FREQ_MIN_HZ to FREQ_MAX_HZ.
+        # Log-spaced frequency grid: N_LOG_BINS bins from FREQ_MIN_HZ to FREQ_MAX_HZ.
         # Each octave gets equal vertical space — this matches how the ear hears
         # and gives the 80–3200 Hz voice range ~80% of the display height instead
         # of the ~39% it gets with a linear scale.
         self._display_freqs = np.logspace(
             np.log10(FREQ_MIN_HZ),
             np.log10(FREQ_MAX_HZ),
-            N_LOG_BINS,
+            n_log_bins,
             dtype=np.float32,
         )
-        self._n_freq_bins = N_LOG_BINS
+        self._n_freq_bins = n_log_bins
 
         # Full FFT frequency array — used by np.interp in add_column()
         self._fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
