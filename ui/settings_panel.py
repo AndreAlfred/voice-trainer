@@ -175,16 +175,22 @@ class SettingsPanel(QWidget):
     def _divider(self) -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.Shape.HLine)
-        f.setStyleSheet(f"color: {theme.UMBER};")
+        f.setFixedHeight(2)
+        f.setStyleSheet(
+            "border: none; background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
+            f" stop:0 transparent, stop:0.5 {theme.BRASS}, stop:1 transparent);"
+        )
         return f
 
     def _header(self, text: str) -> QLabel:
-        lbl = QLabel(text.upper())
-        font = QFont()
+        # Rubricated section header — red ink with a leaf fleuron, the way
+        # scribes marked new sections
+        lbl = QLabel(f"{theme.RUBRIC_LEAF} {text.upper()}")
+        font = QFont(theme.SERIF_FAMILY)
         font.setBold(True)
-        font.setPointSize(9)
+        font.setPointSize(11)
         lbl.setFont(font)
-        lbl.setStyleSheet(f"color: {theme.ULTRAMARINE}; letter-spacing: 1px;")
+        lbl.setStyleSheet(f"color: {theme.VERMILLION}; letter-spacing: 2px;")
         return lbl
 
     def _colormap_section(self) -> QWidget:

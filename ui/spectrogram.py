@@ -15,7 +15,10 @@ from scipy.ndimage import gaussian_filter
 import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 import matplotlib as mpl
+
+from ui import theme
 
 
 # Frequency range to display
@@ -107,12 +110,24 @@ class SpectrogramWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Use dark background throughout
-        pg.setConfigOption('background', '#1a1a2e')
-        pg.setConfigOption('foreground', '#c8c8d4')
+        # Parchment margin around the plot, sepia-ink axes. Only the frame
+        # of the plot is themed — the amplitude colormap and overlay colors
+        # below are functional (they encode the analysis) and stay put.
+        pg.setConfigOption('background', theme.PARCHMENT)
+        pg.setConfigOption('foreground', theme.SEPIA)
 
         self._plot = pg.PlotWidget()
         layout.addWidget(self._plot)
+
+        # Engraved-caption axis typography
+        axis_font = QFont(theme.SERIF_FAMILY, 11)
+        for axis_name in ('left', 'bottom'):
+            axis = self._plot.getAxis(axis_name)
+            axis.setTickFont(axis_font)
+            axis.setTextPen(pg.mkPen(theme.SEPIA))
+            axis.setPen(pg.mkPen(theme.UMBER))
+        # Fixed width so the serif axis label never collides with tick text
+        self._plot.getAxis('left').setWidth(86)
 
         # ImageItem renders the 2D buffer as a color image
         self._image_item = pg.ImageItem()
@@ -125,8 +140,14 @@ class SpectrogramWidget(QWidget):
         self._image_item.setLevels([DISPLAY_DB_MIN, DISPLAY_DB_MAX])
 
         # Y-axis: label frequency bins with Hz values at key points
-        self._plot.setLabel('left', 'Frequency', units='Hz')
-        self._plot.setLabel('bottom', 'Time (scrolling →)')
+        label_style = {
+            'color': theme.SEPIA,
+            'font-family': theme.SERIF_FAMILY,
+            'font-style': 'italic',
+            'font-size': '12pt',
+        }
+        self._plot.setLabel('left', 'Frequency', units='Hz', **label_style)
+        self._plot.setLabel('bottom', 'Time (scrolling →)', **label_style)
         self._plot.showGrid(x=False, y=True, alpha=0.3)
 
         # Add Hz tick marks at musically meaningful frequencies

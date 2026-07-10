@@ -16,6 +16,7 @@ from PySide6.QtGui import QFont, QAction
 from audio.capture import AudioCapture
 from audio.analysis import compute_spectrogram_column, estimate_pitch, estimate_formants
 from ui import theme
+from ui.ornaments import GildedFrame
 from ui.settings import AppSettings
 from ui.settings_panel import SettingsPanel
 from ui.spectrogram import SpectrogramWidget
@@ -55,25 +56,24 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(14, 8, 14, 4)
+        layout.setSpacing(6)
 
-        title = QLabel("· VOICE TRAINER ·")
-        title.setFont(QFont(theme.SERIF_FAMILY, 13))
+        title = QLabel(f"{theme.FLEURON}  · VOICE TRAINER ·  {theme.FLEURON}")
+        title.setFont(QFont(theme.SERIF_FAMILY, 14))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFixedHeight(32)
-        title.setStyleSheet(
-            f"color: {theme.ULTRAMARINE}; background-color: {theme.PARCHMENT_LIGHT}; "
-            f"letter-spacing: 5px; border-bottom: 1px solid {theme.UMBER};"
-        )
+        title.setFixedHeight(36)
+        title.setStyleSheet(theme.TITLE_STYLESHEET)
         layout.addWidget(title)
 
+        # The spectrogram hangs in a gold-leaf picture frame, an old master
+        # on the parchment wall
         self._spectrogram = SpectrogramWidget(
             sample_rate=SAMPLE_RATE,
             n_fft=N_FFT,
             display_seconds=self._settings.display_seconds,
         )
-        layout.addWidget(self._spectrogram, stretch=1)
+        layout.addWidget(GildedFrame(self._spectrogram), stretch=1)
 
         self._pitch_display = PitchDisplayWidget()
         layout.addWidget(self._pitch_display)
