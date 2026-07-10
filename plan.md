@@ -33,12 +33,16 @@ latency at a configurable bin count/FFT size.
    as a self-verifiable litmus and regression guard. **Open question from before
    — "does the offscreen harness capture real glass-to-glass cost?" — resolved:
    close enough; the human test corroborates it.**
-3. **Don't optimize a non-problem.** There is no lag to fix at the current
-   config, so profiling-then-looping to *reduce* latency would be motion, not
-   progress. The live perf lever now is the *other* half of Goal 1a —
-   **resolution**: push bins / FFT size / overlap up and use the harness to
-   keep latency honest as we do. That is a clean autonomous loop; reducing
-   already-fine latency is not.
+3. **Round 1 resolution work landed** (see
+   `docs/superpowers/specs/2026-07-09-spectrogram-resolution-design.md`):
+   Gaussian blur removed, log-resampling matrix in its place, FFT 2048→4096
+   with hop held at 1024 (75% overlap, scroll rate preserved). Litmus
+   re-verified at the new config (2026-07-09, offscreen Qt):
+   `columns=1288 wall=19.73s fps=65.3 latency: mean=0.0ms p95=0.0ms max=0.0ms`
+   — PASS with 2× headroom. A new two-tone separability test guards real
+   frequency resolution as a machine-checkable regression. **Next decision
+   (Andrew's eyes):** is the low-frequency region crisp enough now, or is the
+   Round 2 constant-Q rebuild warranted?
 
 **Litmus target:** sustain ≥ 30 FPS and ≤ 120 ms glass-to-glass latency at 2048
 log-frequency bins over a 30 s synthetic run, with `pytest tests/` green.
