@@ -91,6 +91,7 @@ def run_benchmark(
     n_log_bins: int = 2048,
     duration_s: float = 30.0,
     block_size: int = 1024,
+    hop: int | None = None,
     render: bool = True,
 ) -> BenchmarkResult:
     """Feed `duration_s` seconds of synthetic audio through the analysis
@@ -104,6 +105,9 @@ def run_benchmark(
     accumulate if the pipeline can't keep up. FPS is columns produced per
     wall-clock second. Together these are the litmus from plan.md.
     """
+    if hop is None:
+        hop = n_fft // 2
+
     widget = None
     app = None
     if render:
@@ -113,10 +117,10 @@ def run_benchmark(
             sample_rate=SAMPLE_RATE,
             n_fft=n_fft,
             n_log_bins=n_log_bins,
+            hop=hop,
             display_seconds=8.0,
         )
 
-    hop = n_fft // 2
     audio = generate_synthetic_voice(duration_s, SAMPLE_RATE)
 
     latencies_ms = []
@@ -171,6 +175,8 @@ def main() -> None:
     parser.add_argument("--n-fft", type=int, default=2048, help="FFT size")
     parser.add_argument("--duration", type=float, default=30.0, help="synthetic audio seconds")
     parser.add_argument("--block-size", type=int, default=1024, help="capture block size")
+    parser.add_argument("--hop", type=int, default=None,
+                        help="analysis hop in samples (default: n_fft // 2)")
     parser.add_argument("--no-render", action="store_true", help="skip Qt widget rendering (analysis only)")
     args = parser.parse_args()
 
@@ -179,6 +185,7 @@ def main() -> None:
         n_log_bins=args.bins,
         duration_s=args.duration,
         block_size=args.block_size,
+        hop=args.hop,
         render=not args.no_render,
     )
     print(result.report())

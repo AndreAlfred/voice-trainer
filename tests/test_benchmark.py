@@ -106,3 +106,11 @@ def test_reproducible_column_count_across_runs(n_fft):
     a = run_benchmark(n_fft=n_fft, duration_s=1.5, render=False)
     b = run_benchmark(n_fft=n_fft, duration_s=1.5, render=False)
     assert a.n_columns == b.n_columns
+
+
+def test_hop_is_configurable_and_sets_column_count():
+    """The harness must benchmark the app's real config (n_fft 4096, hop
+    1024) — hop halves/doubles the column count for the same audio."""
+    dense = run_benchmark(n_fft=4096, hop=1024, duration_s=2.0, render=False)
+    sparse = run_benchmark(n_fft=4096, hop=2048, duration_s=2.0, render=False)
+    assert dense.n_columns > 1.5 * sparse.n_columns
