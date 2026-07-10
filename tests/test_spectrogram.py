@@ -186,43 +186,45 @@ class TestMatplotlibColormap:
         # Should not raise
 
 
-class TestGaussianBlur:
-    """Verify Gaussian blur is applied before rendering."""
+class TestHopParameter:
+    """The hop is decoupled from n_fft (spec: hold hop at 1024 while n_fft
+    grows to 4096, preserving the ~43 col/s scroll rate)."""
 
-    def test_blur_sigma_stored(self, qt_app):
-        """Widget should store a blur_sigma attribute."""
+    def test_default_hop_is_half_n_fft(self, qt_app):
         from ui.spectrogram import SpectrogramWidget
-        w = SpectrogramWidget()
-        assert hasattr(w, '_blur_sigma')
-        assert w._blur_sigma == 1.5
+        w = SpectrogramWidget(n_fft=2048)
+        assert w.hop == 1024
 
-    def test_apply_settings_updates_blur_sigma(self, qt_app):
-        """apply_settings should update _blur_sigma from settings."""
+    def test_explicit_hop_sets_scroll_rate(self, qt_app):
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget(n_fft=4096, hop=1024, display_seconds=8.0)
+        # 44100 / 1024 ≈ 43.07 columns/sec → 344 columns at 8 s
+        assert w._n_time_cols == int(8.0 * (44100 / 1024))
+
+    def test_hop_used_after_apply_settings_resize(self, qt_app):
         from ui.spectrogram import SpectrogramWidget
         from ui.settings import AppSettings
-        w = SpectrogramWidget()
-        w.apply_settings(AppSettings(blur_sigma=0.0))
-        assert w._blur_sigma == 0.0
-        w.apply_settings(AppSettings(blur_sigma=2.5))
-        assert w._blur_sigma == 2.5
+        w = SpectrogramWidget(n_fft=4096, hop=1024, display_seconds=8.0)
+        w.apply_settings(AppSettings(display_seconds=4.0))
+        assert w._n_time_cols == int(4.0 * (44100 / 1024))
 
-    def test_add_column_with_blur_smooths_output(self, qt_app):
-        """With blur enabled, the widget processes frames without error."""
+
+class TestResamplerWiring:
+    """add_column must use the precomputed matrix, with no blur pass."""
+
+    def test_no_blur_attribute(self, qt_app):
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget()
+        assert not hasattr(w, '_blur_sigma')
+
+    def test_resample_matrix_built(self, qt_app):
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget(n_fft=2048)
+        assert w._resample_matrix.shape == (w._n_freq_bins, 2048 // 2 + 1)
+
+    def test_flat_spectrum_stays_flat_in_buffer(self, qt_app):
         import numpy as np
         from ui.spectrogram import SpectrogramWidget
         w = SpectrogramWidget(n_fft=2048)
-        spectrum = np.full(1025, -60.0, dtype=np.float32)
-        spectrum[100:110] = 0.0
-        for _ in range(5):
-            w.add_column(spectrum)
-        assert w._blur_sigma > 0
-
-    def test_blur_disabled_when_sigma_zero(self, qt_app):
-        """Setting blur_sigma=0 should disable blur without error."""
-        import numpy as np
-        from ui.spectrogram import SpectrogramWidget
-        from ui.settings import AppSettings
-        w = SpectrogramWidget(n_fft=2048)
-        w.apply_settings(AppSettings(blur_sigma=0.0))
-        spectrum = np.full(1025, -40.0, dtype=np.float32)
-        w.add_column(spectrum)  # must not raise
+        w.add_column(np.full(1025, -40.0, dtype=np.float32))
+        np.testing.assert_allclose(w._buffer[-1], -40.0, atol=1e-3)

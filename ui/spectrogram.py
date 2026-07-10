@@ -11,7 +11,6 @@ voice including harmonics. Color uses the 'magma' colormap: dark purple
 """
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
 import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
@@ -117,6 +116,7 @@ class SpectrogramWidget(QWidget):
         n_fft: int = 2048,
         display_seconds: float = 8.0,
         n_log_bins: int = N_LOG_BINS,
+        hop: int | None = None,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -136,22 +136,21 @@ class SpectrogramWidget(QWidget):
         )
         self._n_freq_bins = n_log_bins
 
-        # Full FFT frequency array — used by np.interp in add_column()
+        # Full FFT frequency array (linear grid of the analysis spectrum)
         self._fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
 
-        # Pre-compute mapping: for each log display bin, the index of the nearest
-        # linear FFT bin. Used only for formant scatter positioning (add_formants).
-        _insert = np.searchsorted(self._fft_freqs, self._display_freqs)
-        _lower = np.clip(_insert - 1, 0, len(self._fft_freqs) - 1)
-        _upper = np.clip(_insert,     0, len(self._fft_freqs) - 1)
-        _dist_lower = np.abs(self._fft_freqs[_lower] - self._display_freqs)
-        _dist_upper = np.abs(self._fft_freqs[_upper] - self._display_freqs)
-        self._freq_indices = np.where(_dist_lower <= _dist_upper, _lower, _upper)
+        # Precomputed log-resampling matrix: display_col = W @ spectrum_db.
+        # Overlap-averages where display bins are wide, interpolates where
+        # they are narrow. Replaces per-frame np.interp + Gaussian blur.
+        self._resample_matrix = build_log_resample_matrix(
+            self._fft_freqs, self._display_freqs)
 
-        # Time axis: number of columns = display_seconds * update_rate
-        # Update rate ≈ sample_rate / (n_fft // 2) due to 50% overlap
-        hop = n_fft // 2
-        self._update_rate = sample_rate / hop  # columns per second
+        # Time axis: number of columns = display_seconds * update_rate.
+        # The hop (analysis stride) is decoupled from n_fft so a larger FFT
+        # window doesn't slow the scroll; it must match the hop used by the
+        # audio loop in ui/app.py.
+        self.hop = hop if hop is not None else n_fft // 2
+        self._update_rate = sample_rate / self.hop  # columns per second
         self._n_time_cols = int(display_seconds * self._update_rate)
 
         # Rolling buffer: shape (time_cols, freq_bins), filled with silence
@@ -167,9 +166,6 @@ class SpectrogramWidget(QWidget):
         self._f2_bins = np.full(self._n_time_cols, np.nan, dtype=np.float32)
 
         self._setup_ui()
-
-        # Blur sigma for smooth topographic rendering (0 = disabled)
-        self._blur_sigma = 1.5
 
     def _setup_ui(self) -> None:
         """Build the pyqtgraph plot widget."""
@@ -288,8 +284,9 @@ class SpectrogramWidget(QWidget):
             spectrum_db: Full magnitude spectrum in dB, shape (n_fft//2+1,).
                          Produced by audio.analysis.compute_spectrogram_column().
         """
-        # Interpolate the linear FFT spectrum onto the log-spaced display grid
-        display_col = np.interp(self._display_freqs, self._fft_freqs, spectrum_db)
+        # Resample the linear FFT spectrum onto the log display grid —
+        # a single matrix-vector product against the precomputed matrix.
+        display_col = self._resample_matrix @ spectrum_db
 
         # Scroll the buffer left by one column and place the new column on the right
         self._buffer[:-1] = self._buffer[1:]
@@ -297,12 +294,7 @@ class SpectrogramWidget(QWidget):
 
         # Update the image. pyqtgraph ImageItem interprets shape (x, y):
         # x = time (horizontal), y = frequency (vertical)
-        # Apply Gaussian blur for smooth topographic rendering
-        if self._blur_sigma > 0:
-            smoothed = gaussian_filter(self._buffer, sigma=(1.0, self._blur_sigma))
-            self._image_item.setImage(smoothed, autoLevels=False)
-        else:
-            self._image_item.setImage(self._buffer, autoLevels=False)
+        self._image_item.setImage(self._buffer, autoLevels=False)
 
     def add_formants(self, f1_hz: float | None, f2_hz: float | None) -> None:
         """Add new F1/F2 estimates and refresh the scatter display.
@@ -377,12 +369,8 @@ class SpectrogramWidget(QWidget):
         r, g, b = settings.background_color
         self._plot.setBackground(f"#{r:02x}{g:02x}{b:02x}")
 
-        # Blur sigma
-        self._blur_sigma = getattr(settings, 'blur_sigma', 1.5)
-
         # Scroll buffer resize when display_seconds changes
-        hop = self.n_fft // 2
-        new_cols = int(settings.display_seconds * (self.sample_rate / hop))
+        new_cols = int(settings.display_seconds * (self.sample_rate / self.hop))
         if new_cols != self._n_time_cols:
             new_buf = np.full(
                 (new_cols, self._n_freq_bins),
