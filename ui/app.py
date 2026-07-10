@@ -22,8 +22,8 @@ from ui.pitch_display import PitchDisplayWidget
 
 SAMPLE_RATE      = 44100
 BLOCK_SIZE       = 1024
-N_FFT            = 2048
-HOP_SIZE         = N_FFT // 2
+N_FFT            = 4096   # ~10.8 Hz bins; window ~93 ms
+HOP_SIZE         = 1024   # decoupled from N_FFT: 75% overlap, ~43 columns/s
 TIMER_INTERVAL_MS = 16
 
 
@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         self._spectrogram = SpectrogramWidget(
             sample_rate=SAMPLE_RATE,
             n_fft=N_FFT,
+            hop=HOP_SIZE,
             display_seconds=self._settings.display_seconds,
         )
         layout.addWidget(self._spectrogram, stretch=1)
