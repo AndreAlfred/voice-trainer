@@ -31,6 +31,74 @@ DISPLAY_DB_MAX = 0.0
 N_LOG_BINS = 1024
 
 
+def build_log_resample_matrix(
+    fft_freqs: np.ndarray,
+    display_freqs: np.ndarray,
+) -> np.ndarray:
+    """Build a matrix W mapping a linear FFT spectrum to log display bins.
+
+    Each display bin owns a frequency band (bounded by the geometric
+    midpoints to its neighbors). Two regimes:
+
+    - Band spans >= one FFT bin width (high frequencies on a log axis):
+      weights are the overlap between the display band and each FFT bin's
+      band — a proper area-weighted average. Crisp and anti-aliased with
+      no post-hoc blur.
+    - Band is narrower than one FFT bin (low frequencies): two-point
+      linear interpolation between the neighboring FFT bin centers, so the
+      low end shows smooth ramps between real values instead of a
+      staircase (design decision A in the 2026-07-09 resolution spec).
+
+    Rows sum to 1, so a flat spectrum maps to a flat column and dB levels
+    are preserved.
+
+    Args:
+        fft_freqs:     Linear FFT bin center frequencies, shape (n_fft//2+1,).
+        display_freqs: Log-spaced display bin centers, strictly increasing.
+
+    Returns:
+        float32 matrix of shape (len(display_freqs), len(fft_freqs)).
+        Apply as `display_col = W @ spectrum_db`.
+    """
+    n_fft_bins = len(fft_freqs)
+    n_display = len(display_freqs)
+    df = float(fft_freqs[1] - fft_freqs[0])
+
+    # FFT bin k covers the linear band [f_k - df/2, f_k + df/2].
+    fft_lo = fft_freqs.astype(np.float64) - df / 2.0
+    fft_hi = fft_freqs.astype(np.float64) + df / 2.0
+
+    # Display bin d covers [lo_edges[d], hi_edges[d]] — geometric midpoints
+    # between neighboring centers; end bins extended by the same log step.
+    centers = display_freqs.astype(np.float64)
+    mids = np.sqrt(centers[:-1] * centers[1:])
+    step = centers[1] / centers[0]
+    lo_edges = np.concatenate([[centers[0] / np.sqrt(step)], mids])
+    hi_edges = np.concatenate([mids, [centers[-1] * np.sqrt(step)]])
+
+    W = np.zeros((n_display, n_fft_bins), dtype=np.float32)
+    for d in range(n_display):
+        lo, hi = lo_edges[d], hi_edges[d]
+        if (hi - lo) >= df:
+            # Downsampling regime: average all FFT bins overlapping the band.
+            overlap = np.minimum(hi, fft_hi) - np.maximum(lo, fft_lo)
+            np.clip(overlap, 0.0, None, out=overlap)
+            total = overlap.sum()
+            if total > 0.0:
+                W[d] = (overlap / total).astype(np.float32)
+                continue
+        # Upsampling regime: linear interpolation between the two FFT bin
+        # centers straddling this display bin's center frequency.
+        c = centers[d]
+        k = int(np.searchsorted(fft_freqs, c))
+        k = min(max(k, 1), n_fft_bins - 1)
+        t = (c - fft_freqs[k - 1]) / (fft_freqs[k] - fft_freqs[k - 1])
+        t = float(np.clip(t, 0.0, 1.0))
+        W[d, k - 1] = 1.0 - t
+        W[d, k] = t
+    return W
+
+
 class SpectrogramWidget(QWidget):
     """Scrolling spectrogram display widget.
 
