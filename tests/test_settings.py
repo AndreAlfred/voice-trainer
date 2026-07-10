@@ -16,7 +16,7 @@ class TestAppSettings:
         assert s.f2_color    == (80, 240, 120)
         assert s.dot_size    == 4
         assert s.singers_formant_visible is True
-        assert s.background_color == (242, 232, 213)  # parchment
+        assert s.background_color == (26, 26, 46)
 
     def test_colormap_name_default(self):
         from ui.settings import AppSettings

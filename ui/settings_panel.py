@@ -25,6 +25,7 @@ from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QColorDialog
 
 from ui import theme
+from ui.ornaments import attach_glow
 from ui.settings import AppSettings
 
 
@@ -41,6 +42,7 @@ class ColorButton(QPushButton):
         self._color = color
         self._refresh_swatch()
         self.clicked.connect(self._pick)
+        attach_glow(self)
 
     def set_color(self, color: tuple) -> None:
         self._color = color
@@ -54,7 +56,7 @@ class ColorButton(QPushButton):
         text = "black" if (r + g + b) > 380 else "white"
         self.setStyleSheet(
             f"background-color: rgb({r},{g},{b}); color: {text}; "
-            f"border: 1px solid {theme.UMBER}; border-radius: 3px;"
+            f"border: 2px ridge {theme.BRASS_DARK}; border-radius: 4px;"
         )
 
     def _pick(self) -> None:
@@ -137,6 +139,9 @@ class SettingsPanel(QWidget):
         super().__init__(parent)
         self._settings = settings
         self.setMinimumWidth(230)
+        # Parchment sheet backdrop (textured via the app stylesheet)
+        self.setObjectName("settings_panel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._build()
 
     def _build(self) -> None:
@@ -205,7 +210,8 @@ class SettingsPanel(QWidget):
         self._preset_buttons: dict[str, QPushButton] = {}
         for label, cmap_name in self.COLORMAP_PRESETS.items():
             btn = QPushButton(label)
-            btn.setFixedHeight(22)
+            btn.setFixedHeight(24)
+            attach_glow(btn)
             btn.clicked.connect(
                 lambda _, name=cmap_name: self._select_colormap(name)
             )

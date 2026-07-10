@@ -4,31 +4,70 @@ ui/ornaments.py — Custom-painted skeuomorphic widgets for the renaissance them
 Flat stylesheets can't do gold leaf. These widgets paint their own materials:
 
   GildedFrame — wraps any widget in a picture-frame of gold-leaf gradient
-                bands, bevels, and corner rosettes. The spectrogram hangs
-                in one like an old master in a gallery.
-  WaxSeal     — a glossy vermillion wax seal that stamps the current note
-                name; fades to cold gray wax in silence.
+                bands with a bead chain, dentil molding, and petaled corner
+                rosettes. The spectrogram hangs in one like an old master.
+  WaxSeal     — a vermillion wax seal on a lapis ribbon, stamped with the
+                current note name; cools to gray wax in silence.
+  HoverGlow   — event filter that adds a warm gold glow to a widget on
+                hover (attach with attach_glow()).
 """
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout
-from PySide6.QtCore import Qt, QRectF, QPointF
+import math
+
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QGraphicsDropShadowEffect
+from PySide6.QtCore import Qt, QObject, QEvent, QRectF, QPointF
 from PySide6.QtGui import (
-    QPainter, QPen, QBrush, QColor, QFont,
+    QPainter, QPen, QBrush, QColor, QFont, QPainterPath,
     QLinearGradient, QRadialGradient,
 )
 
 from ui import theme
 
 
-class GildedFrame(QWidget):
-    """Paints a gold-leaf picture frame around a single child widget."""
+# ---------------------------------------------------------------------------
+# Hover glow
+# ---------------------------------------------------------------------------
 
-    FRAME = 16   # thickness of the gold band, px
+class HoverGlow(QObject):
+    """Adds a warm gold aura to the watched widget while hovered."""
+
+    def __init__(self, color: str = theme.GLOW, radius: int = 24,
+                 parent: QObject | None = None):
+        super().__init__(parent)
+        self._color = color
+        self._radius = radius
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() == QEvent.Type.Enter:
+            glow = QGraphicsDropShadowEffect(obj)
+            glow.setOffset(0, 0)
+            glow.setBlurRadius(self._radius)
+            glow.setColor(QColor(self._color))
+            obj.setGraphicsEffect(glow)
+        elif event.type() in (QEvent.Type.Leave, QEvent.Type.Hide):
+            obj.setGraphicsEffect(None)
+        return False
+
+
+def attach_glow(widget: QWidget, color: str = theme.GLOW,
+                radius: int = 24) -> None:
+    """Install a HoverGlow filter on widget (kept alive as its child)."""
+    widget.installEventFilter(HoverGlow(color, radius, parent=widget))
+
+
+# ---------------------------------------------------------------------------
+# Gilded frame
+# ---------------------------------------------------------------------------
+
+class GildedFrame(QWidget):
+    """Paints an ornate gold-leaf picture frame around a single child widget."""
+
+    FRAME = 20   # thickness of the gold band, px
 
     def __init__(self, inner: QWidget, parent: QWidget | None = None):
         super().__init__(parent)
         lay = QVBoxLayout(self)
-        m = self.FRAME + 4
+        m = self.FRAME + 5
         lay.setContentsMargins(m, m, m, m)
         lay.addWidget(inner)
 
@@ -55,52 +94,109 @@ class GildedFrame(QWidget):
         p.setPen(QPen(QColor(253, 243, 205, 160), 1))
         p.drawRoundedRect(r.adjusted(2, 2, -2, -2), 8, 8)
 
-        # Rebate around the "canvas": dark sight edge + thin gold fillet
+        # Bead chain along the middle of the band
+        self._bead_chain(p, r.adjusted(6.5, 6.5, -6.5, -6.5))
+
+        # Dentil molding along the sight edge
         inner = r.adjusted(self.FRAME, self.FRAME, -self.FRAME, -self.FRAME)
+        self._dentils(p, inner.adjusted(-5, -5, 5, 5))
+
+        # Rebate around the "canvas": thin gold fillet + dark sight edge
+        p.setBrush(Qt.BrushStyle.NoBrush)
         p.setPen(QPen(QColor(247, 231, 181, 200), 1))
         p.drawRoundedRect(inner.adjusted(-2, -2, 2, 2), 5, 5)
         p.setPen(QPen(QColor("#40320e"), 2))
         p.drawRoundedRect(inner, 4, 4)
 
-        # Corner rosettes — little turned medallions
+        # Petaled corner rosettes over everything
         for corner in (
             r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight()
         ):
             cx = corner.x() + (self.FRAME / 2 + 1) * (1 if corner.x() < r.center().x() else -1)
             cy = corner.y() + (self.FRAME / 2 + 1) * (1 if corner.y() < r.center().y() else -1)
-            self._rosette(p, QPointF(cx, cy), self.FRAME / 2 - 1)
+            self._rosette(p, QPointF(cx, cy), self.FRAME / 2 + 1)
+
+    @staticmethod
+    def _bead_chain(p: QPainter, band: QRectF, spacing: float = 9.0) -> None:
+        """Rows of tiny gold beads along each straight run of the band."""
+        margin = 16.0
+        runs = [
+            # (start point, dx, dy, length)
+            (QPointF(band.left() + margin, band.top()), 1, 0,
+             band.width() - 2 * margin),
+            (QPointF(band.left() + margin, band.bottom()), 1, 0,
+             band.width() - 2 * margin),
+            (QPointF(band.left(), band.top() + margin), 0, 1,
+             band.height() - 2 * margin),
+            (QPointF(band.right(), band.top() + margin), 0, 1,
+             band.height() - 2 * margin),
+        ]
+        for start, dx, dy, length in runs:
+            n = max(int(length // spacing), 0)
+            for i in range(n + 1):
+                c = QPointF(start.x() + dx * i * spacing,
+                            start.y() + dy * i * spacing)
+                p.setPen(QPen(QColor("#5a4312"), 0.8))
+                p.setBrush(QColor("#8a6a1f"))
+                p.drawEllipse(c, 2.2, 2.2)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor("#f7e7b5"))
+                p.drawEllipse(QPointF(c.x() - 0.6, c.y() - 0.6), 1.0, 1.0)
+
+    @staticmethod
+    def _dentils(p: QPainter, edge: QRectF, step: float = 11.0) -> None:
+        """Alternating notches (dentil molding) just outside the sight edge."""
+        pen = QPen(QColor(74, 56, 16, 150), 1)
+        p.setPen(pen)
+        x = edge.left() + 8
+        while x < edge.right() - 8:
+            p.drawLine(QPointF(x, edge.top() - 2), QPointF(x, edge.top() + 2))
+            p.drawLine(QPointF(x, edge.bottom() - 2), QPointF(x, edge.bottom() + 2))
+            x += step
+        y = edge.top() + 8
+        while y < edge.bottom() - 8:
+            p.drawLine(QPointF(edge.left() - 2, y), QPointF(edge.left() + 2, y))
+            p.drawLine(QPointF(edge.right() - 2, y), QPointF(edge.right() + 2, y))
+            y += step
 
     @staticmethod
     def _rosette(p: QPainter, center: QPointF, radius: float) -> None:
-        glow = QRadialGradient(center.x() - radius * 0.3,
-                               center.y() - radius * 0.3, radius * 2)
-        glow.setColorAt(0.0, QColor("#f7e7b5"))
-        glow.setColorAt(0.55, QColor("#c9a227"))
-        glow.setColorAt(1.0, QColor("#6b4f14"))
+        """Eight-petaled acanthus rosette with a domed center boss."""
+        petal_grad = QLinearGradient(center.x(), center.y() - radius,
+                                     center.x(), center.y() + radius)
+        petal_grad.setColorAt(0.0, QColor("#eed489"))
+        petal_grad.setColorAt(1.0, QColor("#8a6a1f"))
         p.setPen(QPen(QColor("#4a3810"), 1))
-        p.setBrush(QBrush(glow))
-        p.drawEllipse(center, radius, radius)
-        p.setPen(QPen(QColor("#8a6a1f"), 1))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(center, radius * 0.55, radius * 0.55)
+        p.setBrush(QBrush(petal_grad))
+        for i in range(8):
+            p.save()
+            p.translate(center)
+            p.rotate(i * 45.0)
+            p.drawEllipse(QRectF(-radius * 0.28, -radius * 1.05,
+                                 radius * 0.56, radius * 0.95))
+            p.restore()
+        boss = QRadialGradient(center.x() - radius * 0.25,
+                               center.y() - radius * 0.25, radius)
+        boss.setColorAt(0.0, QColor("#fbf0c8"))
+        boss.setColorAt(0.6, QColor("#c9a227"))
+        boss.setColorAt(1.0, QColor("#6b4f14"))
+        p.setBrush(QBrush(boss))
+        p.drawEllipse(center, radius * 0.5, radius * 0.5)
 
+
+# ---------------------------------------------------------------------------
+# Wax seal
+# ---------------------------------------------------------------------------
 
 class WaxSeal(QWidget):
-    """A round wax seal stamped with the current note name.
+    """A charter seal on a lapis ribbon, stamped with the current note.
 
-    Vermillion and glossy while a pitch is sounding; cold gray wax when
+    Crimson and glossy while a pitch is sounding; cold gray wax when
     silent. Call set_note("A4") or set_note(None).
     """
 
-    SIZE = 84
-
-    # Fixed blob layout (angle in degrees, radial offset, blob radius) so
-    # the seal's drips don't jitter between repaints.
-    _BLOBS = [
-        (12, 1.00, 7.5), (55, 0.96, 6.0), (98, 1.03, 8.0),
-        (137, 0.97, 5.5), (176, 1.02, 7.0), (214, 0.95, 6.5),
-        (251, 1.04, 8.5), (289, 0.98, 5.5), (327, 1.01, 7.0),
-    ]
+    SIZE = 104
+    SCALLOPS = 14
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -113,58 +209,93 @@ class WaxSeal(QWidget):
             self.update()
 
     def paintEvent(self, event) -> None:
-        import math
-
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        c = QPointF(self.width() / 2, self.height() / 2)
-        base_r = self.SIZE * 0.34
+        c = QPointF(self.width() / 2, self.height() / 2 - 4)
+        R = self.SIZE * 0.31
 
+        # --- Lapis ribbon tails hanging behind the seal ---
+        for angle in (-26.0, 26.0):
+            p.save()
+            p.translate(c)
+            p.rotate(angle)
+            ribbon = QPainterPath()
+            ribbon.moveTo(-8, R * 0.3)
+            ribbon.lineTo(8, R * 0.3)
+            ribbon.lineTo(8, R + 22)
+            ribbon.lineTo(0, R + 13)          # swallow-tail notch
+            ribbon.lineTo(-8, R + 22)
+            ribbon.closeSubpath()
+            rg = QLinearGradient(0, 0, 0, R + 22)
+            rg.setColorAt(0.0, QColor("#4266bd"))
+            rg.setColorAt(1.0, QColor("#16295c"))
+            p.setPen(QPen(QColor("#101d40"), 1))
+            p.setBrush(QBrush(rg))
+            p.drawPath(ribbon)
+            p.restore()
+
+        # --- Wax body ---
         if self._note is not None:
-            hi, mid, edge = "#e86a42", "#b03418", "#7c1e10"
-            text_color = QColor("#f6e8d4")
+            hi, body, rim = "#f07a4e", "#c0341c", "#8c2012"
+            edge_line = QColor("#5e130a")
+            text_color = QColor("#ffe3cf")
         else:
-            hi, mid, edge = "#b3a284", "#8d7b5c", "#67593f"
+            hi, body, rim = "#c2b193", "#8d7b5c", "#67593f"
+            edge_line = QColor("#4a3f2c")
             text_color = QColor("#efe5d0")
 
-        wax = QRadialGradient(c.x() - base_r * 0.35, c.y() - base_r * 0.4,
-                              base_r * 2.1)
+        wax = QRadialGradient(c.x() - R * 0.35, c.y() - R * 0.4, R * 2.2)
         wax.setColorAt(0.0, QColor(hi))
-        wax.setColorAt(0.55, QColor(mid))
-        wax.setColorAt(1.0, QColor(edge))
-        p.setPen(QPen(QColor(edge).darker(130), 1))
+        wax.setColorAt(0.55, QColor(body))
+        wax.setColorAt(1.0, QColor(rim))
+        p.setPen(QPen(edge_line, 1.2))
         p.setBrush(QBrush(wax))
 
-        # Irregular dripped edge: overlapping blobs around the rim
-        for angle_deg, dist, blob_r in self._BLOBS:
-            a = math.radians(angle_deg)
-            bx = c.x() + math.cos(a) * base_r * dist
-            by = c.y() + math.sin(a) * base_r * dist
-            p.drawEllipse(QPointF(bx, by), blob_r, blob_r)
+        # Regular scalloped rim — a pressed rosette, not random drips
+        scallop_r = R * 0.24
+        for i in range(self.SCALLOPS):
+            a = 2 * math.pi * i / self.SCALLOPS
+            p.drawEllipse(
+                QPointF(c.x() + math.cos(a) * R, c.y() + math.sin(a) * R),
+                scallop_r, scallop_r,
+            )
+        p.drawEllipse(c, R + scallop_r * 0.55, R + scallop_r * 0.55)
 
-        # Main pool of wax over the blobs
-        p.drawEllipse(c, base_r + 4, base_r + 4)
-
-        # Stamp impression ring
+        # --- Stamp impression ---
+        # Recessed double ring
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setPen(QPen(QColor(edge).darker(115), 1.5))
-        p.drawEllipse(c, base_r - 3, base_r - 3)
+        p.setPen(QPen(edge_line, 1.6))
+        p.drawEllipse(c, R * 0.80, R * 0.80)
+        p.setPen(QPen(QColor(255, 235, 220, 90), 1))
+        p.drawEllipse(c, R * 0.80 - 1.6, R * 0.80 - 1.6)
 
-        # Aero gloss: translucent light pooling across the upper face
-        gloss = QLinearGradient(c.x(), c.y() - base_r, c.x(), c.y())
-        gloss.setColorAt(0.0, QColor(255, 255, 255, 90))
+        # Radial fluting between ring and rim
+        p.setPen(QPen(QColor(edge_line.red(), edge_line.green(),
+                             edge_line.blue(), 90), 1))
+        for i in range(24):
+            a = 2 * math.pi * i / 24
+            p.drawLine(
+                QPointF(c.x() + math.cos(a) * R * 0.86,
+                        c.y() + math.sin(a) * R * 0.86),
+                QPointF(c.x() + math.cos(a) * R * 0.98,
+                        c.y() + math.sin(a) * R * 0.98),
+            )
+
+        # --- Aero gloss pooling across the upper face ---
+        gloss = QLinearGradient(c.x(), c.y() - R, c.x(), c.y())
+        gloss.setColorAt(0.0, QColor(255, 255, 255, 95))
         gloss.setColorAt(1.0, QColor(255, 255, 255, 0))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QBrush(gloss))
-        p.drawEllipse(QRectF(c.x() - base_r * 0.75, c.y() - base_r * 0.85,
-                             base_r * 1.5, base_r * 0.95))
+        p.drawEllipse(QRectF(c.x() - R * 0.78, c.y() - R * 0.9,
+                             R * 1.56, R * 0.95))
 
-        # Stamped note name, embossed into the wax
-        font = QFont(theme.SERIF_FAMILY, 17, QFont.Weight.Bold)
-        p.setFont(font)
+        # --- Stamped note name, embossed ---
         text = self._note if self._note is not None else "—"
-        rect = QRectF(0, 0, self.width(), self.height())
-        p.setPen(QColor(0, 0, 0, 110))
-        p.drawText(rect.translated(1, 1), Qt.AlignmentFlag.AlignCenter, text)
+        size = 23 if len(text) <= 2 else 18
+        p.setFont(QFont(theme.SERIF_FAMILY, size, QFont.Weight.Bold))
+        rect = QRectF(c.x() - R, c.y() - R, R * 2, R * 2)
+        p.setPen(QColor(0, 0, 0, 130))
+        p.drawText(rect.translated(1.2, 1.5), Qt.AlignmentFlag.AlignCenter, text)
         p.setPen(text_color)
         p.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)

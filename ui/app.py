@@ -16,7 +16,7 @@ from PySide6.QtGui import QFont, QAction
 from audio.capture import AudioCapture
 from audio.analysis import compute_spectrogram_column, estimate_pitch, estimate_formants
 from ui import theme
-from ui.ornaments import GildedFrame
+from ui.ornaments import GildedFrame, attach_glow
 from ui.settings import AppSettings
 from ui.settings_panel import SettingsPanel
 from ui.spectrogram import SpectrogramWidget
@@ -38,7 +38,7 @@ class MainWindow(QMainWindow):
         self.resize(1100, 650)
 
         self._settings = AppSettings.load()
-        self.setStyleSheet(theme.APP_STYLESHEET)
+        self.setStyleSheet(theme.build_app_stylesheet())
 
         self._capture = AudioCapture(sample_rate=SAMPLE_RATE, block_size=BLOCK_SIZE)
         self._audio_buffer = np.zeros(0, dtype=np.float32)
@@ -59,11 +59,12 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 8, 14, 4)
         layout.setSpacing(6)
 
+        # Engraved marble lintel (textured via the app stylesheet)
         title = QLabel(f"{theme.FLEURON}  · VOICE TRAINER ·  {theme.FLEURON}")
-        title.setFont(QFont(theme.SERIF_FAMILY, 14))
+        title.setObjectName("title_banner")
+        title.setFont(QFont(theme.SERIF_FAMILY, 14, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFixedHeight(36)
-        title.setStyleSheet(theme.TITLE_STYLESHEET)
+        title.setFixedHeight(38)
         layout.addWidget(title)
 
         # The spectrogram hangs in a gold-leaf picture frame, an old master
@@ -101,6 +102,9 @@ class MainWindow(QMainWindow):
         dock.visibilityChanged.connect(toggle.setChecked)
         toolbar.addAction(toggle)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
+        toggle_btn = toolbar.widgetForAction(toggle)
+        if toggle_btn is not None:
+            attach_glow(toggle_btn)
 
     def _on_settings_changed(self, settings: AppSettings) -> None:
         # background_color applies to the spectrogram plot (inside

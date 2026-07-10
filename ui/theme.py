@@ -3,12 +3,17 @@ ui/theme.py — Renaissance-skeuomorphic theme (frutiger aero, renaissance mater
 
 Single source of truth for the look of everything around the spectrogram's
 heat map: window chrome, toolbar, pitch readout, settings panel, plot axes.
-Glossy dimensional controls in renaissance materials — gold leaf, walnut,
-lapis lazuli, vermillion wax, parchment.
+CD-ROM-era skeuomorphism: tiled procedural textures (parchment, marble,
+walnut, sandstone — see ui/textures.py), chunky ridge/inset bevels, glossy
+brass and lapis gradients, fountain-pen-nib slider handles.
 
 The spectrogram's amplitude colormap and formant-dot colors are functional
 (they encode the analysis) and are deliberately NOT defined here.
-Custom-painted ornaments (gilded frame, wax seal) live in ui/ornaments.py.
+Custom-painted ornaments (gilded frame, wax seal, hover glow) live in
+ui/ornaments.py.
+
+Call build_app_stylesheet() after QApplication exists (it generates the
+texture PNGs on first run).
 """
 
 # ---------------------------------------------------------------------------
@@ -35,6 +40,9 @@ WALNUT_LIGHT    = "#7a5a35"
 WALNUT          = "#5c4326"
 WALNUT_DARK     = "#3f2d18"
 
+# Hover glow (gauche and proud)
+GLOW            = "#ffdf8e"
+
 # Palatino ships with macOS and is named for Giambattista Palatino,
 # a 16th-century calligrapher — the most renaissance font a Mac has.
 SERIF_FAMILY = "Palatino"
@@ -54,6 +62,11 @@ _GLOSS_BRASS = (
     f" stop:0 #fbf0c8, stop:0.45 {BRASS_LIGHT},"
     f" stop:0.5 {BRASS}, stop:1 {BRASS_DARK})"
 )
+_GLOSS_BRASS_HOVER = (
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+    f" stop:0 #fff8dc, stop:0.45 #f8ecc0,"
+    f" stop:0.5 #dcb945, stop:1 {BRASS})"
+)
 _GLOSS_BRASS_PRESSED = (
     "qlineargradient(x1:0, y1:0, x2:0, y2:1,"
     f" stop:0 {BRASS_DARK}, stop:0.5 {BRASS}, stop:1 {BRASS_LIGHT})"
@@ -63,31 +76,33 @@ _GLOSS_LAPIS = (
     " stop:0 #8fa8e8, stop:0.45 #4266bd,"
     f" stop:0.5 {ULTRAMARINE}, stop:1 #16295c)"
 )
-_WALNUT_RAIL = (
+_GLOSS_PARCHMENT = (
     "qlineargradient(x1:0, y1:0, x2:0, y2:1,"
-    f" stop:0 {WALNUT_LIGHT}, stop:0.12 {WALNUT},"
-    f" stop:0.9 {WALNUT_DARK}, stop:1 #2b1e0f)"
+    f" stop:0 #fefaef, stop:0.45 {PARCHMENT_LIGHT},"
+    f" stop:0.5 {PARCHMENT}, stop:1 {PARCHMENT_DARK})"
 )
-_PARCHMENT_WALL = (
-    "qlineargradient(x1:0, y1:0, x2:0.3, y2:1,"
-    f" stop:0 {PARCHMENT_LIGHT}, stop:0.5 {PARCHMENT}, stop:1 {PARCHMENT_DARK})"
+_GLOSS_PARCHMENT_HOVER = (
+    "qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+    f" stop:0 #fffdf5, stop:0.45 #fdf8ea,"
+    f" stop:0.5 {PARCHMENT_LIGHT}, stop:1 {PARCHMENT})"
 )
 _BRASS_PLAQUE = (
     "qlineargradient(x1:0, y1:0, x2:0, y2:1,"
     f" stop:0 {BRASS_LIGHT}, stop:0.5 #d9bc6a, stop:1 {BRASS})"
 )
-_BRASS_KNOB = (
-    "qradialgradient(cx:0.38, cy:0.32, radius:0.9, fx:0.38, fy:0.32,"
-    f" stop:0 #fbf0c8, stop:0.55 {BRASS}, stop:1 {BRASS_DEEP})"
-)
 
-# ---------------------------------------------------------------------------
-# Application stylesheet
-# ---------------------------------------------------------------------------
 
-APP_STYLESHEET = f"""
+def build_app_stylesheet() -> str:
+    """Assemble the app stylesheet, generating texture PNGs if needed.
+
+    Must be called after QApplication exists.
+    """
+    from ui.textures import ensure_textures
+    tex = ensure_textures()
+
+    return f"""
 QMainWindow {{
-    background: {_PARCHMENT_WALL};
+    background-image: url("{tex['parchment']}");
 }}
 
 QWidget {{
@@ -101,62 +116,86 @@ QLabel {{
 
 /* --- Walnut toolbar rail with glossy inlaid buttons --- */
 QToolBar {{
-    background: {_WALNUT_RAIL};
+    background-image: url("{tex['walnut']}");
     border: none;
-    border-bottom: 2px solid {BRASS_DEEP};
+    border-bottom: 3px ridge {BRASS_DEEP};
     spacing: 8px;
     padding: 4px 10px;
 }}
 QToolBar QToolButton {{
     background: {_GLOSS_BRASS};
     color: {SEPIA};
-    border: 1px solid {BRASS_DEEP};
+    border: 2px ridge {BRASS_DEEP};
     border-radius: 9px;
     padding: 3px 14px;
     font-weight: bold;
 }}
 QToolBar QToolButton:hover {{
-    border-color: #fbf0c8;
+    background: {_GLOSS_BRASS_HOVER};
+    border: 2px ridge {GLOW};
 }}
 QToolBar QToolButton:pressed {{
     background: {_GLOSS_BRASS_PRESSED};
+    border-style: inset;
 }}
 QToolBar QToolButton:checked {{
     background: {_GLOSS_LAPIS};
     color: {PARCHMENT_LIGHT};
-    border-color: #16295c;
+    border: 2px inset #16295c;
 }}
 
-/* --- Settings dock: brass plaque title over parchment --- */
+/* --- Settings dock: marble plaque title over parchment --- */
 QDockWidget {{
     color: {SEPIA};
     font-weight: bold;
 }}
 QDockWidget::title {{
-    background: {_BRASS_PLAQUE};
-    border: 1px solid {BRASS_DEEP};
+    background-image: url("{tex['marble']}");
+    border: 2px ridge {BRASS_DARK};
     border-radius: 3px;
-    padding: 6px;
+    padding: 7px;
     text-align: center;
 }}
 
-/* --- Glossy parchment-brass buttons --- */
-QPushButton {{
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #fefaef, stop:0.45 {PARCHMENT_LIGHT},
-        stop:0.5 {PARCHMENT}, stop:1 {PARCHMENT_DARK});
-    color: {SEPIA};
-    border: 1px solid {UMBER};
+/* --- Settings panel wall: parchment sheet --- */
+#settings_panel {{
+    background-image: url("{tex['parchment']}");
+    border-left: 2px groove {BRASS_DARK};
+}}
+
+/* --- Title banner: engraved marble lintel --- */
+#title_banner {{
+    color: {ULTRAMARINE};
+    background-image: url("{tex['marble']}");
+    letter-spacing: 6px;
+    border: 2px ridge {BRASS};
+    border-radius: 6px;
+}}
+
+/* --- Pitch readout shelf: sandstone ledge --- */
+#pitch_shelf {{
+    background-image: url("{tex['stone']}");
+    border: 3px ridge {BRASS_DARK};
     border-radius: 8px;
+}}
+
+/* --- Glossy parchment-brass buttons with gauche hover glow --- */
+QPushButton {{
+    background: {_GLOSS_PARCHMENT};
+    color: {SEPIA};
+    border: 2px ridge {UMBER};
+    border-radius: 6px;
     padding: 4px 10px;
 }}
 QPushButton:hover {{
-    border-color: {BRASS_DARK};
+    background: {_GLOSS_PARCHMENT_HOVER};
+    border: 2px ridge {GLOW};
     color: {ULTRAMARINE};
 }}
 QPushButton:pressed {{
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 {PARCHMENT_DARK}, stop:1 {PARCHMENT_LIGHT});
+    border-style: inset;
 }}
 
 /* --- Checkboxes: lapis cabochon when set --- */
@@ -168,44 +207,40 @@ QCheckBox {{
 QCheckBox::indicator {{
     width: 15px;
     height: 15px;
-    border: 1px solid {UMBER};
+    border: 2px inset {UMBER};
     border-radius: 4px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 {PARCHMENT_DARK}, stop:1 {PARCHMENT_LIGHT});
 }}
 QCheckBox::indicator:checked {{
     background: {_GLOSS_LAPIS};
-    border-color: #16295c;
+    border: 2px ridge {BRASS_DARK};
 }}
 
-/* --- Sliders: recessed channel, gold fill, turned-brass knob --- */
+/* --- Sliders: recessed channel, gold fill, fountain-pen nib --- */
 QSlider {{
     background: transparent;
-    height: 22px;
+    height: 32px;
 }}
 QSlider::groove:horizontal {{
-    height: 6px;
+    height: 8px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #c9b892, stop:0.5 {PARCHMENT_DARK}, stop:1 {PARCHMENT_LIGHT});
-    border: 1px solid {UMBER};
+        stop:0 #b9a67e, stop:0.5 {PARCHMENT_DARK}, stop:1 {PARCHMENT_LIGHT});
+    border: 2px groove {UMBER};
     border-radius: 3px;
 }}
 QSlider::sub-page:horizontal {{
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 {BRASS_LIGHT}, stop:0.5 {BRASS}, stop:1 {BRASS_DARK});
-    border: 1px solid {BRASS_DEEP};
+    border: 2px groove {BRASS_DEEP};
     border-radius: 3px;
 }}
 QSlider::handle:horizontal {{
-    width: 16px;
-    height: 16px;
-    margin: -6px 0;
-    border-radius: 9px;
-    background: {_BRASS_KNOB};
-    border: 1px solid {BRASS_DEEP};
-}}
-QSlider::handle:horizontal:hover {{
-    border-color: #fbf0c8;
+    image: url("{tex['nib']}");
+    width: 18px;
+    margin: -12px 0;
+    background: transparent;
+    border: none;
 }}
 
 /* --- Scroll areas / scrollbars --- */
@@ -236,22 +271,12 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
 }}
 """
 
-# Title banner: illuminated header strip above the framed spectrogram
-TITLE_STYLESHEET = f"""
-color: {ULTRAMARINE};
-background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-    stop:0 #fdf7e7, stop:0.55 {PARCHMENT_LIGHT}, stop:1 {PARCHMENT_DARK});
-letter-spacing: 6px;
-border: 1px solid {UMBER};
-border-bottom: 2px solid {BRASS};
-border-radius: 6px;
-"""
 
 # Engraved brass plate for the frequency readout
 BRASS_PLATE_STYLESHEET = f"""
 background: {_BRASS_PLAQUE};
 color: {SEPIA};
-border: 1px solid {BRASS_DEEP};
+border: 2px ridge {BRASS_DEEP};
 border-radius: 6px;
 padding: 6px 16px;
 """

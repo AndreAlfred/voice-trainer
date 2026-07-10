@@ -11,6 +11,7 @@ gray wax and the plate reads "No pitch detected".
 """
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
 from audio.analysis import hz_to_note_name
@@ -19,7 +20,8 @@ from ui.ornaments import WaxSeal
 
 
 class PitchDisplayWidget(QWidget):
-    """Displays current pitch as a wax-seal note stamp and a brass Hz plate.
+    """Displays current pitch as a wax-seal note stamp and a brass Hz plate,
+    set on a sandstone ledge (textured via the app stylesheet).
 
     Args:
         parent: Parent QWidget, or None for a top-level widget.
@@ -27,13 +29,15 @@ class PitchDisplayWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setFixedHeight(96)
+        self.setFixedHeight(118)
+        self.setObjectName("pitch_shelf")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._setup_ui()
 
     def _setup_ui(self) -> None:
         """Build the label layout."""
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(20, 4, 20, 4)
+        layout.setContentsMargins(24, 4, 24, 4)
 
         self._seal = WaxSeal()
 

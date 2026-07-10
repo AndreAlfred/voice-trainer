@@ -135,8 +135,12 @@ class SpectrogramWidget(QWidget):
 
         # Perceptually uniform colormap sampled at 256 points from matplotlib.
         # Default is 'inferno': black → purple → red → orange → yellow.
-        colormap = self._build_colormap("inferno")
-        self._image_item.setColorMap(colormap)
+        # The lookup table's floor fades into the user's backdrop color
+        # (AppSettings.background_color) so "background" means the canvas
+        # the visualization paints on, not the axis margins.
+        self._cmap_name = "inferno"
+        self._backdrop_rgb = (26, 26, 46)
+        self._apply_heatmap_lut()
         self._image_item.setLevels([DISPLAY_DB_MIN, DISPLAY_DB_MAX])
 
         # Y-axis: label frequency bins with Hz values at key points
@@ -231,6 +235,24 @@ class SpectrogramWidget(QWidget):
         colors = (mpl_cmap(positions) * 255).astype(np.uint8)
         return pg.ColorMap(pos=positions, color=colors)
 
+    def _apply_heatmap_lut(self) -> None:
+        """Build the image lookup table: colormap with its floor faded into
+        the backdrop color.
+
+        The lowest ~11% of the dB range blends from the user's backdrop
+        color into the colormap, so silence shows the chosen canvas color
+        while the amplitude encoding above it is untouched.
+        """
+        cmap = self._build_colormap(self._cmap_name)
+        lut = cmap.getLookupTable(nPts=256, alpha=False)
+        backdrop = np.array(self._backdrop_rgb, dtype=float)
+        k = 28
+        t = np.linspace(0.0, 1.0, k)[:, None]
+        lut[:k] = np.clip(
+            backdrop * (1.0 - t) + lut[:k].astype(float) * t, 0, 255
+        ).astype(lut.dtype)
+        self._image_item.setLookupTable(lut)
+
     def add_column(self, spectrum_db: np.ndarray) -> None:
         """Add a new spectrum column and refresh the display.
 
@@ -310,10 +332,12 @@ class SpectrogramWidget(QWidget):
         """
         import pyqtgraph as pg
 
-        # Colormap
-        colormap_name = getattr(settings, 'colormap_name', 'inferno')
-        colormap = self._build_colormap(colormap_name)
-        self._image_item.setColorMap(colormap)
+        # Colormap + visualization backdrop (blended into the LUT floor).
+        # The axis margins keep the theme's parchment; background_color
+        # colors the canvas the heat map paints on.
+        self._cmap_name = getattr(settings, 'colormap_name', 'inferno')
+        self._backdrop_rgb = tuple(settings.background_color)
+        self._apply_heatmap_lut()
         self._image_item.setLevels([settings.db_floor, settings.db_ceiling])
 
         # Formant dots
@@ -324,10 +348,6 @@ class SpectrogramWidget(QWidget):
 
         # Singer's formant band
         self._singers_formant_region.setVisible(settings.singers_formant_visible)
-
-        # Background
-        r, g, b = settings.background_color
-        self._plot.setBackground(f"#{r:02x}{g:02x}{b:02x}")
 
         # Blur sigma
         self._blur_sigma = getattr(settings, 'blur_sigma', 1.5)

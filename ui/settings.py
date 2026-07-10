@@ -34,8 +34,9 @@ class AppSettings:
     # Overlay visibility
     singers_formant_visible: bool = True
 
-    # Spectrogram plot background (the margin around the heat-map image)
-    background_color: tuple = (242, 232, 213)  # parchment #f2e8d5
+    # Visualization backdrop — the canvas color the heat map paints on
+    # (blended into the colormap floor; axis margins stay themed)
+    background_color: tuple = (26, 26, 46)  # #1a1a2e
 
     # Blur sigma for spectrogram smoothing (0 = disabled)
     blur_sigma: float = 1.5
