@@ -37,9 +37,6 @@ class AppSettings:
     # Window / plot background
     background_color: tuple = (26, 26, 46)  # #1a1a2e
 
-    # Blur sigma for spectrogram smoothing (0 = disabled)
-    blur_sigma: float = 1.5
-
     @classmethod
     def load(cls) -> "AppSettings":
         """Load from SETTINGS_FILE. Returns defaults if file is missing or corrupt."""
