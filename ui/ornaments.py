@@ -39,11 +39,13 @@ class HoverGlow(QObject):
 
     def eventFilter(self, obj, event) -> bool:
         if event.type() == QEvent.Type.Enter:
-            glow = QGraphicsDropShadowEffect(obj)
-            glow.setOffset(0, 0)
-            glow.setBlurRadius(self._radius)
-            glow.setColor(QColor(self._color))
-            obj.setGraphicsEffect(glow)
+            # Glow belongs to the renaissance theme; classic dark stays flat
+            if theme.mode() == "light":
+                glow = QGraphicsDropShadowEffect(obj)
+                glow.setOffset(0, 0)
+                glow.setBlurRadius(self._radius)
+                glow.setColor(QColor(self._color))
+                obj.setGraphicsEffect(glow)
         elif event.type() in (QEvent.Type.Leave, QEvent.Type.Hide):
             obj.setGraphicsEffect(None)
         return False
@@ -66,12 +68,24 @@ class GildedFrame(QWidget):
 
     def __init__(self, inner: QWidget, parent: QWidget | None = None):
         super().__init__(parent)
+        self._ornate = True
         lay = QVBoxLayout(self)
         m = self.FRAME + 5
         lay.setContentsMargins(m, m, m, m)
         lay.addWidget(inner)
 
+    def set_ornate(self, ornate: bool) -> None:
+        """Show the gold frame (light mode) or collapse to nothing (dark)."""
+        if ornate == self._ornate:
+            return
+        self._ornate = ornate
+        m = (self.FRAME + 5) if ornate else 0
+        self.layout().setContentsMargins(m, m, m, m)
+        self.update()
+
     def paintEvent(self, event) -> None:
+        if not self._ornate:
+            return
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)

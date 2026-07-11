@@ -18,6 +18,10 @@ class TestAppSettings:
         assert s.singers_formant_visible is True
         assert s.background_color == (26, 26, 46)
 
+    def test_theme_mode_default(self):
+        from ui.settings import AppSettings
+        assert AppSettings().theme_mode == "light"
+
     def test_colormap_name_default(self):
         from ui.settings import AppSettings
         s = AppSettings()

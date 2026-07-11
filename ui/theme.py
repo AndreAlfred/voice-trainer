@@ -1,20 +1,39 @@
 """
-ui/theme.py — Renaissance-skeuomorphic theme (frutiger aero, renaissance materials).
+ui/theme.py — Application themes: renaissance light mode, classic dark mode.
 
-Single source of truth for the look of everything around the spectrogram's
-heat map: window chrome, toolbar, pitch readout, settings panel, plot axes.
-CD-ROM-era skeuomorphism: tiled procedural textures (parchment, marble,
-walnut, sandstone — see ui/textures.py), chunky ridge/inset bevels, glossy
-brass and lapis gradients, fountain-pen-nib slider handles.
+Two modes, switched live from the toolbar and persisted in AppSettings:
+
+  "light" — the renaissance-skeuomorphic theme: tiled procedural textures
+            (parchment, marble, walnut, sandstone — see ui/textures.py),
+            chunky ridge/inset bevels, glossy brass and lapis gradients,
+            fountain-pen-nib slider handles.
+  "dark"  — the original flat midnight design: navy ground, muted lavender
+            text, Courier readouts, stock Qt controls.
+
+Widgets consult mode() for the current mode; build_app_stylesheet(mode)
+returns the matching app stylesheet. Call it after QApplication exists
+(light mode generates texture PNGs on first run).
 
 The spectrogram's amplitude colormap and formant-dot colors are functional
 (they encode the analysis) and are deliberately NOT defined here.
 Custom-painted ornaments (gilded frame, wax seal, hover glow) live in
 ui/ornaments.py.
-
-Call build_app_stylesheet() after QApplication exists (it generates the
-texture PNGs on first run).
 """
+
+# ---------------------------------------------------------------------------
+# Mode state
+# ---------------------------------------------------------------------------
+
+_current_mode = "light"
+
+
+def set_mode(mode: str) -> None:
+    global _current_mode
+    _current_mode = "dark" if mode == "dark" else "light"
+
+
+def mode() -> str:
+    return _current_mode
 
 # ---------------------------------------------------------------------------
 # Palette — renaissance pigments and materials
@@ -50,6 +69,25 @@ SERIF_FAMILY = "Palatino"
 # Typographic fleurons for headers and labels
 FLEURON = "❦"
 RUBRIC_LEAF = "❧"
+
+# Classic dark mode — the original flat midnight palette
+DARK_BG        = "#1a1a2e"   # window / plot ground
+DARK_PANEL     = "#0d0d1a"   # title strip, toolbar, pitch bar
+DARK_TEXT      = "#c8c8d4"   # primary text
+DARK_HEADER    = "#888aaa"   # section headers
+DARK_FAINT     = "#555577"   # hints
+DARK_DIVIDER   = "#2a2a4a"   # dividers, active preset fill
+DARK_BORDER    = "#444466"   # swatch borders
+DARK_TITLE     = "#666688"   # title text
+DARK_ACTIVE    = "#f0e68c"   # pitch readout when voice detected
+DARK_SILENT    = "#555566"   # pitch readout when silent
+
+
+def swatch_border() -> str:
+    """Border for color-swatch buttons, per current mode."""
+    if _current_mode == "dark":
+        return f"1px solid {DARK_BORDER}"
+    return f"2px ridge {BRASS_DARK}"
 
 # ---------------------------------------------------------------------------
 # Reusable gradient snippets (Qt stylesheet syntax)
@@ -92,11 +130,17 @@ _BRASS_PLAQUE = (
 )
 
 
-def build_app_stylesheet() -> str:
-    """Assemble the app stylesheet, generating texture PNGs if needed.
+def build_app_stylesheet(mode: str | None = None) -> str:
+    """Assemble the app stylesheet for the given (or current) mode.
 
-    Must be called after QApplication exists.
+    Must be called after QApplication exists — light mode generates its
+    texture PNGs on first run.
     """
+    if mode is None:
+        mode = _current_mode
+    if mode == "dark":
+        return _dark_stylesheet()
+
     from ui.textures import ensure_textures
     tex = ensure_textures()
 
@@ -268,6 +312,142 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
 }}
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
     background: transparent;
+}}
+
+/* --- Settings-panel typography (objectName hooks, per-mode) --- */
+#section_header {{
+    color: {VERMILLION};
+    font: bold 11pt "{SERIF_FAMILY}";
+    letter-spacing: 2px;
+}}
+#divider {{
+    border: none;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 transparent, stop:0.5 {BRASS}, stop:1 transparent);
+}}
+#value_label {{
+    color: {ULTRAMARINE};
+}}
+#hint_label {{
+    color: {SEPIA_FAINT};
+    font-size: 10px;
+}}
+#preset_button {{
+    font-size: 10px;
+    padding: 3px 6px;
+}}
+QPushButton[activePreset="true"] {{
+    border: 2px ridge {ULTRAMARINE};
+    background: {PARCHMENT_DARK};
+    color: {ULTRAMARINE};
+}}
+"""
+
+
+def _dark_stylesheet() -> str:
+    """The original flat midnight design, as an app-wide stylesheet."""
+    return f"""
+QMainWindow {{
+    background-color: {DARK_BG};
+}}
+
+QWidget {{
+    color: {DARK_TEXT};
+}}
+
+QLabel {{
+    background: transparent;
+}}
+
+QToolBar {{
+    background: {DARK_PANEL};
+    border: none;
+    spacing: 6px;
+    padding: 2px 6px;
+}}
+QToolBar QToolButton {{
+    background: transparent;
+    color: {DARK_TEXT};
+    border: 1px solid {DARK_BORDER};
+    border-radius: 3px;
+    padding: 3px 10px;
+}}
+QToolBar QToolButton:checked {{
+    background: {DARK_DIVIDER};
+}}
+
+QDockWidget {{
+    color: {DARK_HEADER};
+}}
+QDockWidget::title {{
+    background: {DARK_PANEL};
+    padding: 5px;
+}}
+
+#title_banner {{
+    color: {DARK_TITLE};
+    background-color: {DARK_PANEL};
+    letter-spacing: 4px;
+    border: none;
+}}
+
+#pitch_shelf {{
+    background-color: {DARK_PANEL};
+    border: none;
+}}
+
+#settings_panel {{
+    background-color: {DARK_BG};
+}}
+
+QPushButton {{
+    background: {DARK_DIVIDER};
+    color: {DARK_TEXT};
+    border: 1px solid {DARK_BORDER};
+    border-radius: 3px;
+    padding: 3px 8px;
+}}
+
+QCheckBox {{
+    color: {DARK_TEXT};
+    background: transparent;
+}}
+
+QSlider {{
+    background: transparent;
+}}
+
+QScrollArea {{
+    border: none;
+    background: transparent;
+}}
+QScrollArea > QWidget > QWidget {{
+    background: transparent;
+}}
+
+#section_header {{
+    color: {DARK_HEADER};
+    font: bold 9pt;
+    letter-spacing: 1px;
+}}
+#divider {{
+    border: none;
+    background: {DARK_DIVIDER};
+}}
+#value_label {{
+    color: {DARK_TEXT};
+}}
+#hint_label {{
+    color: {DARK_FAINT};
+    font-size: 10px;
+}}
+#preset_button {{
+    font-size: 10px;
+    padding: 3px 6px;
+}}
+QPushButton[activePreset="true"] {{
+    border: 2px solid {DARK_TEXT};
+    background-color: {DARK_DIVIDER};
 }}
 """
 

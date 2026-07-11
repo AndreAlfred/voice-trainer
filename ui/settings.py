@@ -16,6 +16,9 @@ SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 
 @dataclass
 class AppSettings:
+    # UI theme: "light" = renaissance skeuomorphic, "dark" = classic midnight
+    theme_mode: str = "light"
+
     # Matplotlib colormap name (e.g. "inferno", "viridis", "magma", "gist_earth")
     colormap_name: str = "inferno"
 

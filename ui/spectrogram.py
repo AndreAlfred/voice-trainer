@@ -324,6 +324,49 @@ class SpectrogramWidget(QWidget):
         else:
             self._f2_scatter.setData(x=[], y=[])
 
+    def set_theme_mode(self, mode: str) -> None:
+        """Restyle the plot frame (margins, axes, labels) for the theme.
+
+        Light = parchment margin with serif sepia axes; dark = the original
+        midnight margin with the stock axis look. The heat map itself
+        (colormap, levels, overlays) is untouched.
+        """
+        if mode == "dark":
+            margin_bg = "#1a1a2e"
+            fg = pg.mkPen("#c8c8d4")
+            tick_font = QFont()
+            label_style = {
+                'color': '#c8c8d4',
+                'font-family': 'Helvetica Neue',
+                'font-style': 'normal',
+                'font-size': '10pt',
+            }
+        else:
+            margin_bg = theme.PARCHMENT
+            fg = pg.mkPen(theme.SEPIA)
+            tick_font = QFont(theme.SERIF_FAMILY, 11)
+            label_style = {
+                'color': theme.SEPIA,
+                'font-family': theme.SERIF_FAMILY,
+                'font-style': 'italic',
+                'font-size': '12pt',
+            }
+
+        self._plot.setBackground(margin_bg)
+        axis_pen = fg if mode == "dark" else pg.mkPen(theme.UMBER)
+        for axis_name in ('left', 'bottom'):
+            axis = self._plot.getAxis(axis_name)
+            axis.setTickFont(tick_font)
+            axis.setTextPen(fg)
+            axis.setPen(axis_pen)
+        left = self._plot.getAxis('left')
+        if mode == "dark":
+            left.setWidth()      # autosize, as the original did
+        else:
+            left.setWidth(86)    # room for the serif label
+        self._plot.setLabel('left', 'Frequency', units='Hz', **label_style)
+        self._plot.setLabel('bottom', 'Time (scrolling →)', **label_style)
+
     def apply_settings(self, settings: object) -> None:
         """Apply all visual settings live — no restart needed.
 
