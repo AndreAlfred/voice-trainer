@@ -16,6 +16,9 @@ SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 
 @dataclass
 class AppSettings:
+    # UI theme: "light" = renaissance skeuomorphic, "dark" = classic midnight
+    theme_mode: str = "light"
+
     # Matplotlib colormap name (e.g. "inferno", "viridis", "magma", "gist_earth")
     colormap_name: str = "inferno"
 
@@ -34,7 +37,8 @@ class AppSettings:
     # Overlay visibility
     singers_formant_visible: bool = True
 
-    # Window / plot background
+    # Visualization backdrop — the canvas color the heat map paints on
+    # (blended into the colormap floor; axis margins stay themed)
     background_color: tuple = (26, 26, 46)  # #1a1a2e
 
     # Blur sigma for spectrogram smoothing (0 = disabled)

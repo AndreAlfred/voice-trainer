@@ -24,6 +24,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QColorDialog
 
+from ui import theme
+from ui.ornaments import attach_glow
 from ui.settings import AppSettings
 
 
@@ -40,6 +42,7 @@ class ColorButton(QPushButton):
         self._color = color
         self._refresh_swatch()
         self.clicked.connect(self._pick)
+        attach_glow(self)
 
     def set_color(self, color: tuple) -> None:
         self._color = color
@@ -53,7 +56,7 @@ class ColorButton(QPushButton):
         text = "black" if (r + g + b) > 380 else "white"
         self.setStyleSheet(
             f"background-color: rgb({r},{g},{b}); color: {text}; "
-            f"border: 1px solid #444466; border-radius: 3px;"
+            f"border: {theme.swatch_border()}; border-radius: 4px;"
         )
 
     def _pick(self) -> None:
@@ -84,7 +87,7 @@ class LabeledSlider(QWidget):
         top.addWidget(QLabel(label))
         top.addStretch()
         self._val_lbl = QLabel(self._fmt(current_val))
-        self._val_lbl.setStyleSheet("color: #c8c8d4;")
+        self._val_lbl.setObjectName("value_label")
         top.addWidget(self._val_lbl)
         layout.addLayout(top)
 
@@ -96,7 +99,7 @@ class LabeledSlider(QWidget):
         layout.addWidget(self._slider)
 
         hint = QLabel(f"default: {self._fmt(default_val)}")
-        hint.setStyleSheet("color: #555577; font-size: 10px;")
+        hint.setObjectName("hint_label")
         layout.addWidget(hint)
 
     def _fmt(self, val: float) -> str:
@@ -136,6 +139,10 @@ class SettingsPanel(QWidget):
         super().__init__(parent)
         self._settings = settings
         self.setMinimumWidth(230)
+        # Backdrop styled per mode via the app stylesheet
+        self.setObjectName("settings_panel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._headers: list[tuple[QLabel, str]] = []
         self._build()
 
     def _build(self) -> None:
@@ -174,17 +181,24 @@ class SettingsPanel(QWidget):
     def _divider(self) -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.Shape.HLine)
-        f.setStyleSheet("color: #2a2a4a;")
+        f.setFixedHeight(2)
+        f.setObjectName("divider")
         return f
 
     def _header(self, text: str) -> QLabel:
-        lbl = QLabel(text.upper())
-        font = QFont()
-        font.setBold(True)
-        font.setPointSize(9)
-        lbl.setFont(font)
-        lbl.setStyleSheet("color: #888aaa; letter-spacing: 1px;")
+        # Section header. Light mode rubricates it — red ink with a leaf
+        # fleuron, the way scribes marked new sections; dark mode is plain.
+        lbl = QLabel()
+        lbl.setObjectName("section_header")
+        self._headers.append((lbl, text.upper()))
+        self._set_header_text(lbl, text.upper())
         return lbl
+
+    def _set_header_text(self, lbl: QLabel, text: str) -> None:
+        if theme.mode() == "light":
+            lbl.setText(f"{theme.RUBRIC_LEAF} {text}")
+        else:
+            lbl.setText(text)
 
     def _colormap_section(self) -> QWidget:
         w = QWidget()
@@ -198,7 +212,9 @@ class SettingsPanel(QWidget):
         self._preset_buttons: dict[str, QPushButton] = {}
         for label, cmap_name in self.COLORMAP_PRESETS.items():
             btn = QPushButton(label)
-            btn.setFixedHeight(22)
+            btn.setObjectName("preset_button")
+            btn.setFixedHeight(24)
+            attach_glow(btn)
             btn.clicked.connect(
                 lambda _, name=cmap_name: self._select_colormap(name)
             )
@@ -215,17 +231,24 @@ class SettingsPanel(QWidget):
         self._emit()
 
     def _update_preset_highlight(self) -> None:
+        # Highlight styling lives in the per-mode stylesheets, keyed off
+        # the activePreset dynamic property
         active = self._settings.colormap_name
         for cmap_name, btn in self._preset_buttons.items():
-            if cmap_name == active:
-                btn.setStyleSheet(
-                    "font-size: 10px; border-radius: 3px; "
-                    "border: 2px solid #c8c8d4; background-color: #2a2a4a;"
-                )
-            else:
-                btn.setStyleSheet(
-                    "font-size: 10px; border-radius: 3px;"
-                )
+            btn.setProperty("activePreset", cmap_name == active)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+    def set_theme_mode(self, mode: str) -> None:
+        """Re-dress mode-dependent details (header fleurons, swatch borders).
+
+        Colors and fonts come from the per-mode app stylesheet.
+        """
+        for lbl, text in self._headers:
+            self._set_header_text(lbl, text)
+        for btn in (self._f1_btn, self._f2_btn, self._bg_btn):
+            btn._refresh_swatch()
+        self._update_preset_highlight()
 
     def _db_section(self) -> QWidget:
         w = QWidget()

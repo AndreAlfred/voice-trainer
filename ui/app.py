@@ -15,6 +15,8 @@ from PySide6.QtGui import QFont, QAction
 
 from audio.capture import AudioCapture
 from audio.analysis import compute_spectrogram_column, estimate_pitch, estimate_formants
+from ui import theme
+from ui.ornaments import GildedFrame, attach_glow
 from ui.settings import AppSettings
 from ui.settings_panel import SettingsPanel
 from ui.spectrogram import SpectrogramWidget
@@ -36,14 +38,14 @@ class MainWindow(QMainWindow):
         self.resize(1100, 650)
 
         self._settings = AppSettings.load()
-        r, g, b = self._settings.background_color
-        self.setStyleSheet(f"background-color: rgb({r},{g},{b});")
+        theme.set_mode(self._settings.theme_mode)
 
         self._capture = AudioCapture(sample_rate=SAMPLE_RATE, block_size=BLOCK_SIZE)
         self._audio_buffer = np.zeros(0, dtype=np.float32)
 
         self._setup_ui()
         self._setup_settings_dock()
+        self._apply_theme_mode(self._settings.theme_mode)
         self._spectrogram.apply_settings(self._settings)
 
         self._capture.start()
@@ -54,28 +56,56 @@ class MainWindow(QMainWindow):
     def _setup_ui(self) -> None:
         central = QWidget()
         self.setCentralWidget(central)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        self._central_layout = QVBoxLayout(central)
 
-        title = QLabel("VOICE TRAINER")
-        title.setFont(QFont("Courier", 11))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFixedHeight(30)
-        title.setStyleSheet(
-            "color: #666688; background-color: #0d0d1a; letter-spacing: 4px;"
-        )
-        layout.addWidget(title)
+        # Title strip — marble lintel in light mode, flat band in dark
+        # (styled per mode via #title_banner and _apply_theme_mode)
+        self._title = QLabel()
+        self._title.setObjectName("title_banner")
+        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._central_layout.addWidget(self._title)
 
+        # In light mode the spectrogram hangs in a gold-leaf picture frame;
+        # in dark mode the frame collapses and it sits flush, as it used to
         self._spectrogram = SpectrogramWidget(
             sample_rate=SAMPLE_RATE,
             n_fft=N_FFT,
             display_seconds=self._settings.display_seconds,
         )
-        layout.addWidget(self._spectrogram, stretch=1)
+        self._frame = GildedFrame(self._spectrogram)
+        self._central_layout.addWidget(self._frame, stretch=1)
 
         self._pitch_display = PitchDisplayWidget()
-        layout.addWidget(self._pitch_display)
+        self._central_layout.addWidget(self._pitch_display)
+
+    def _apply_theme_mode(self, mode: str) -> None:
+        """Dress every mode-aware element for the given theme, live."""
+        theme.set_mode(mode)
+        self.setStyleSheet(theme.build_app_stylesheet(mode))
+
+        if mode == "dark":
+            self._central_layout.setContentsMargins(0, 0, 0, 0)
+            self._central_layout.setSpacing(0)
+            self._title.setText("VOICE TRAINER")
+            self._title.setFont(QFont("Courier", 11))
+            self._title.setFixedHeight(30)
+        else:
+            self._central_layout.setContentsMargins(14, 8, 14, 4)
+            self._central_layout.setSpacing(6)
+            self._title.setText(f"{theme.FLEURON}  · VOICE TRAINER ·  {theme.FLEURON}")
+            self._title.setFont(QFont(theme.SERIF_FAMILY, 14, QFont.Weight.Bold))
+            self._title.setFixedHeight(38)
+
+        self._frame.set_ornate(mode != "dark")
+        self._spectrogram.set_theme_mode(mode)
+        self._pitch_display.set_theme_mode(mode)
+        self._settings_panel.set_theme_mode(mode)
+
+    def _on_dark_mode_toggled(self, checked: bool) -> None:
+        mode = "dark" if checked else "light"
+        self._settings.theme_mode = mode
+        self._settings.save()
+        self._apply_theme_mode(mode)
 
     def _setup_settings_dock(self) -> None:
         self._settings_panel = SettingsPanel(self._settings)
@@ -99,11 +129,22 @@ class MainWindow(QMainWindow):
         toggle.toggled.connect(dock.setVisible)
         dock.visibilityChanged.connect(toggle.setChecked)
         toolbar.addAction(toggle)
+
+        dark_toggle = QAction("☾  Dark Mode", self)
+        dark_toggle.setCheckable(True)
+        dark_toggle.setChecked(self._settings.theme_mode == "dark")
+        dark_toggle.toggled.connect(self._on_dark_mode_toggled)
+        toolbar.addAction(dark_toggle)
+
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
+        for action in (toggle, dark_toggle):
+            btn = toolbar.widgetForAction(action)
+            if btn is not None:
+                attach_glow(btn)
 
     def _on_settings_changed(self, settings: AppSettings) -> None:
-        r, g, b = settings.background_color
-        self.setStyleSheet(f"background-color: rgb({r},{g},{b});")
+        # background_color applies to the spectrogram plot (inside
+        # apply_settings); the window chrome keeps the theme stylesheet.
         self._spectrogram.apply_settings(settings)
 
     def _process_audio(self) -> None:

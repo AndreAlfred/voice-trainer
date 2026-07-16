@@ -15,7 +15,10 @@ from scipy.ndimage import gaussian_filter
 import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 import matplotlib as mpl
+
+from ui import theme
 
 
 # Frequency range to display
@@ -108,12 +111,24 @@ class SpectrogramWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Use dark background throughout
-        pg.setConfigOption('background', '#1a1a2e')
-        pg.setConfigOption('foreground', '#c8c8d4')
+        # Parchment margin around the plot, sepia-ink axes. Only the frame
+        # of the plot is themed — the amplitude colormap and overlay colors
+        # below are functional (they encode the analysis) and stay put.
+        pg.setConfigOption('background', theme.PARCHMENT)
+        pg.setConfigOption('foreground', theme.SEPIA)
 
         self._plot = pg.PlotWidget()
         layout.addWidget(self._plot)
+
+        # Engraved-caption axis typography
+        axis_font = QFont(theme.SERIF_FAMILY, 11)
+        for axis_name in ('left', 'bottom'):
+            axis = self._plot.getAxis(axis_name)
+            axis.setTickFont(axis_font)
+            axis.setTextPen(pg.mkPen(theme.SEPIA))
+            axis.setPen(pg.mkPen(theme.UMBER))
+        # Fixed width so the serif axis label never collides with tick text
+        self._plot.getAxis('left').setWidth(86)
 
         # ImageItem renders the 2D buffer as a color image
         self._image_item = pg.ImageItem()
@@ -121,13 +136,23 @@ class SpectrogramWidget(QWidget):
 
         # Perceptually uniform colormap sampled at 256 points from matplotlib.
         # Default is 'inferno': black → purple → red → orange → yellow.
-        colormap = self._build_colormap("inferno")
-        self._image_item.setColorMap(colormap)
+        # The lookup table's floor fades into the user's backdrop color
+        # (AppSettings.background_color) so "background" means the canvas
+        # the visualization paints on, not the axis margins.
+        self._cmap_name = "inferno"
+        self._backdrop_rgb = (26, 26, 46)
+        self._apply_heatmap_lut()
         self._image_item.setLevels([DISPLAY_DB_MIN, DISPLAY_DB_MAX])
 
         # Y-axis: label frequency bins with Hz values at key points
-        self._plot.setLabel('left', 'Frequency', units='Hz')
-        self._plot.setLabel('bottom', 'Time (scrolling →)')
+        label_style = {
+            'color': theme.SEPIA,
+            'font-family': theme.SERIF_FAMILY,
+            'font-style': 'italic',
+            'font-size': '12pt',
+        }
+        self._plot.setLabel('left', 'Frequency', units='Hz', **label_style)
+        self._plot.setLabel('bottom', 'Time (scrolling →)', **label_style)
         self._plot.showGrid(x=False, y=True, alpha=0.3)
 
         # Add Hz tick marks at musically meaningful frequencies
@@ -211,6 +236,24 @@ class SpectrogramWidget(QWidget):
         colors = (mpl_cmap(positions) * 255).astype(np.uint8)
         return pg.ColorMap(pos=positions, color=colors)
 
+    def _apply_heatmap_lut(self) -> None:
+        """Build the image lookup table: colormap with its floor faded into
+        the backdrop color.
+
+        The lowest ~11% of the dB range blends from the user's backdrop
+        color into the colormap, so silence shows the chosen canvas color
+        while the amplitude encoding above it is untouched.
+        """
+        cmap = self._build_colormap(self._cmap_name)
+        lut = cmap.getLookupTable(nPts=256, alpha=False)
+        backdrop = np.array(self._backdrop_rgb, dtype=float)
+        k = 28
+        t = np.linspace(0.0, 1.0, k)[:, None]
+        lut[:k] = np.clip(
+            backdrop * (1.0 - t) + lut[:k].astype(float) * t, 0, 255
+        ).astype(lut.dtype)
+        self._image_item.setLookupTable(lut)
+
     def add_column(self, spectrum_db: np.ndarray) -> None:
         """Add a new spectrum column and refresh the display.
 
@@ -282,6 +325,49 @@ class SpectrogramWidget(QWidget):
         else:
             self._f2_scatter.setData(x=[], y=[])
 
+    def set_theme_mode(self, mode: str) -> None:
+        """Restyle the plot frame (margins, axes, labels) for the theme.
+
+        Light = parchment margin with serif sepia axes; dark = the original
+        midnight margin with the stock axis look. The heat map itself
+        (colormap, levels, overlays) is untouched.
+        """
+        if mode == "dark":
+            margin_bg = "#1a1a2e"
+            fg = pg.mkPen("#c8c8d4")
+            tick_font = QFont()
+            label_style = {
+                'color': '#c8c8d4',
+                'font-family': 'Helvetica Neue',
+                'font-style': 'normal',
+                'font-size': '10pt',
+            }
+        else:
+            margin_bg = theme.PARCHMENT
+            fg = pg.mkPen(theme.SEPIA)
+            tick_font = QFont(theme.SERIF_FAMILY, 11)
+            label_style = {
+                'color': theme.SEPIA,
+                'font-family': theme.SERIF_FAMILY,
+                'font-style': 'italic',
+                'font-size': '12pt',
+            }
+
+        self._plot.setBackground(margin_bg)
+        axis_pen = fg if mode == "dark" else pg.mkPen(theme.UMBER)
+        for axis_name in ('left', 'bottom'):
+            axis = self._plot.getAxis(axis_name)
+            axis.setTickFont(tick_font)
+            axis.setTextPen(fg)
+            axis.setPen(axis_pen)
+        left = self._plot.getAxis('left')
+        if mode == "dark":
+            left.setWidth()      # autosize, as the original did
+        else:
+            left.setWidth(86)    # room for the serif label
+        self._plot.setLabel('left', 'Frequency', units='Hz', **label_style)
+        self._plot.setLabel('bottom', 'Time (scrolling →)', **label_style)
+
     def apply_settings(self, settings: object) -> None:
         """Apply all visual settings live — no restart needed.
 
@@ -290,10 +376,12 @@ class SpectrogramWidget(QWidget):
         """
         import pyqtgraph as pg
 
-        # Colormap
-        colormap_name = getattr(settings, 'colormap_name', 'inferno')
-        colormap = self._build_colormap(colormap_name)
-        self._image_item.setColorMap(colormap)
+        # Colormap + visualization backdrop (blended into the LUT floor).
+        # The axis margins keep the theme's parchment; background_color
+        # colors the canvas the heat map paints on.
+        self._cmap_name = getattr(settings, 'colormap_name', 'inferno')
+        self._backdrop_rgb = tuple(settings.background_color)
+        self._apply_heatmap_lut()
         self._image_item.setLevels([settings.db_floor, settings.db_ceiling])
 
         # Formant dots
@@ -304,10 +392,6 @@ class SpectrogramWidget(QWidget):
 
         # Singer's formant band
         self._singers_formant_region.setVisible(settings.singers_formant_visible)
-
-        # Background
-        r, g, b = settings.background_color
-        self._plot.setBackground(f"#{r:02x}{g:02x}{b:02x}")
 
         # Blur sigma
         self._blur_sigma = getattr(settings, 'blur_sigma', 1.5)
