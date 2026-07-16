@@ -40,13 +40,29 @@ latency at a configurable bin count/FFT size.
    re-verified at the new config (2026-07-09, offscreen Qt):
    `columns=1288 wall=19.73s fps=65.3 latency: mean=0.0ms p95=0.0ms max=0.0ms`
    — PASS with 2× headroom. A new two-tone separability test guards real
-   frequency resolution as a machine-checkable regression. **Next decision
-   (Andrew's eyes):** is the low-frequency region crisp enough now, or is the
-   Round 2 constant-Q rebuild warranted?
+   frequency resolution as a machine-checkable regression.
+4. **Resolution is now machine-measurable — the "eye chart" (2026-07-09).**
+   Andrew flagged (correctly) that judging crispness by eye is confounded by
+   display settings (dB floor/ceiling) and can't anchor a loop. The harness now
+   measures resolution directly: `python -m tools.benchmark_spectrogram
+   --resolution --n-fft 4096` reports the smallest two-tone gap (in cents) that
+   renders as two distinct ridges, at musically spread centers. Measured
+   (old → Round 1): C3 800→600¢, G3 600→300¢, C4 600→300¢, A4 300→200¢,
+   A5 200→100¢, A6 100→50¢, A7 50→25¢; G2 not separable in either. Round 1
+   roughly halved the gaps, **but the low-mid voice (G2–C4) still can't show
+   2–3-semitone intervals as separate** — that is the metric-backed case for
+   **Round 2: constant-Q / multi-resolution analysis** (long windows for low
+   notes, short for high). Proposed Round 2 litmus, pending Andrew's sign-off:
+   **≤100 cents (one semitone) separable at every tested center G2–A7, while
+   holding ≥30 FPS / ≤120 ms p95 and `pytest` green.** With that goalpost the
+   Round 2 work becomes a clean autonomous loop; Andrew's eyes return only for
+   a final taste pass.
 
-**Litmus target:** sustain ≥ 30 FPS and ≤ 120 ms glass-to-glass latency at 2048
-log-frequency bins over a 30 s synthetic run, with `pytest tests/` green.
-**Status: MET** at 2048 bins (synthetic + human-confirmed, 2026-07-08).
+**Perf litmus:** ≥ 30 FPS and ≤ 120 ms p95 glass-to-glass over a 30 s synthetic
+run, `pytest tests/` green. **Status: MET** at both 2048-bin (2026-07-08,
+human-confirmed) and Round 1 4096-FFT configs (2026-07-09).
+**Resolution litmus (proposed for Round 2):** ≤ 100¢ separable at every tested
+center. **Status: NOT MET** below A5 as of Round 1.
 
 ---
 
