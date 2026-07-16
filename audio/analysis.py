@@ -123,6 +123,54 @@ def compute_spectrogram_column(
 
 
 # ---------------------------------------------------------------------------
+# Multi-resolution spectrogram (Goal 1a Round 2)
+# ---------------------------------------------------------------------------
+
+# Frequency bands and the FFT window used for each: (band_lo_hz, band_hi_hz,
+# n_fft). hi=None means "up to Nyquist". Long windows resolve fine pitch at
+# the bottom of the range (a semitone at G2 is only ~5.7 Hz, needing ~0.74 s
+# of signal); short windows keep time crisp at the top, where onsets and
+# consonants live. The display stitches one strip per band.
+MULTIRES_BANDS = (
+    (0.0,    400.0, 32768),   # ~0.74 s window, ~1.35 Hz bins
+    (400.0, 1600.0, 8192),    # ~0.19 s window, ~5.4 Hz bins
+    (1600.0, None,  4096),    # ~93 ms window, ~10.8 Hz bins
+)
+
+# The audio history a caller must retain to feed the longest band window.
+MULTIRES_MAX_WINDOW = max(n_fft for (_, _, n_fft) in MULTIRES_BANDS)
+
+
+def compute_multires_column(
+    samples: np.ndarray,
+    sample_rate: int = 44100,
+    bands: tuple = MULTIRES_BANDS,
+) -> list[np.ndarray]:
+    """Compute one spectrum per band, each from that band's window length.
+
+    Every band's window ends at the same instant — the most recent sample —
+    so the strips stay time-aligned. compute_spectrogram_column already
+    takes the trailing n_fft samples (zero-padding if short), so each call
+    just requests a different window size from the same history buffer.
+
+    Args:
+        samples:     Audio history, 1D float array. For full resolution
+                     supply at least MULTIRES_MAX_WINDOW samples.
+        sample_rate: Samples per second.
+        bands:       (lo_hz, hi_hz, n_fft) tuples; hi of one band must equal
+                     lo of the next (validated by tests, used by the display
+                     to stitch non-overlapping strips).
+
+    Returns:
+        List of dB spectra, one per band, shapes (n_fft_i//2 + 1,).
+    """
+    return [
+        compute_spectrogram_column(samples, sample_rate, n_fft)
+        for (_lo, _hi, n_fft) in bands
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Pitch estimation
 # ---------------------------------------------------------------------------
 

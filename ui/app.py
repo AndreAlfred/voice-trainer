@@ -14,7 +14,10 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont, QAction
 
 from audio.capture import AudioCapture
-from audio.analysis import compute_spectrogram_column, estimate_pitch, estimate_formants
+from audio.analysis import (
+    MULTIRES_BANDS, MULTIRES_MAX_WINDOW,
+    compute_multires_column, estimate_pitch, estimate_formants,
+)
 from ui import theme
 from ui.ornaments import GildedFrame, attach_glow
 from ui.settings import AppSettings
@@ -24,8 +27,8 @@ from ui.pitch_display import PitchDisplayWidget
 
 SAMPLE_RATE      = 44100
 BLOCK_SIZE       = 1024
-N_FFT            = 4096   # ~10.8 Hz bins; window ~93 ms
-HOP_SIZE         = 1024   # decoupled from N_FFT: 75% overlap, ~43 columns/s
+HOP_SIZE         = 1024   # analysis stride: ~43 columns/s scroll rate
+PITCH_WINDOW     = 4096   # samples for pitch/formant estimation (~93 ms)
 TIMER_INTERVAL_MS = 16
 
 
@@ -42,6 +45,9 @@ class MainWindow(QMainWindow):
 
         self._capture = AudioCapture(sample_rate=SAMPLE_RATE, block_size=BLOCK_SIZE)
         self._audio_buffer = np.zeros(0, dtype=np.float32)
+        # Rolling history sized for the longest multires band window; every
+        # band's analysis window is a tail of this, ending at "now".
+        self._history = np.zeros(MULTIRES_MAX_WINDOW, dtype=np.float32)
 
         self._setup_ui()
         self._setup_settings_dock()
@@ -69,8 +75,8 @@ class MainWindow(QMainWindow):
         # in dark mode the frame collapses and it sits flush, as it used to
         self._spectrogram = SpectrogramWidget(
             sample_rate=SAMPLE_RATE,
-            n_fft=N_FFT,
             hop=HOP_SIZE,
+            bands=MULTIRES_BANDS,
             display_seconds=self._settings.display_seconds,
         )
         self._frame = GildedFrame(self._spectrogram)
@@ -162,19 +168,24 @@ class MainWindow(QMainWindow):
         self._audio_buffer = np.concatenate([self._audio_buffer] + new_chunks)
         latest_pitch = None
 
-        while len(self._audio_buffer) >= N_FFT:
-            window = self._audio_buffer[:N_FFT]
-            spectrum_db  = compute_spectrogram_column(window, SAMPLE_RATE, N_FFT)
-            pitch_hz     = estimate_pitch(window, SAMPLE_RATE)
-            f1_hz, f2_hz = estimate_formants(window, SAMPLE_RATE)
+        while len(self._audio_buffer) >= HOP_SIZE:
+            # Roll HOP_SIZE new samples into the fixed-length history; each
+            # band then analyzes its own tail of the history, so all bands'
+            # windows end at the same instant and the strips stay aligned.
+            self._history = np.concatenate(
+                [self._history[HOP_SIZE:], self._audio_buffer[:HOP_SIZE]])
+            self._audio_buffer = self._audio_buffer[HOP_SIZE:]
 
-            self._spectrogram.add_column(spectrum_db)
+            spectra = compute_multires_column(self._history, SAMPLE_RATE)
+            recent = self._history[-PITCH_WINDOW:]
+            pitch_hz     = estimate_pitch(recent, SAMPLE_RATE)
+            f1_hz, f2_hz = estimate_formants(recent, SAMPLE_RATE)
+
+            self._spectrogram.add_column(spectra)
             self._spectrogram.add_formants(f1_hz, f2_hz)
 
             if pitch_hz is not None:
                 latest_pitch = pitch_hz
-
-            self._audio_buffer = self._audio_buffer[HOP_SIZE:]
 
         self._pitch_display.update_pitch(latest_pitch)
 

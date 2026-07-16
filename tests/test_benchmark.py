@@ -152,3 +152,16 @@ class TestResolutionMetric:
         centers = (262.0, 880.0)
         table = measure_resolution(n_fft=4096, centers=centers)
         assert set(table.keys()) == set(centers)
+
+
+def test_round2_resolution_litmus_met_in_multires_mode():
+    """THE Round 2 litmus (plan.md, signed off 2026-07-09): every tested
+    center G2-A7 must separate two tones 100 cents (one semitone) apart
+    with the app's multi-resolution bands."""
+    from audio.analysis import MULTIRES_BANDS
+    from tools.benchmark_spectrogram import measure_resolution
+
+    table = measure_resolution(n_fft=0, bands=MULTIRES_BANDS)
+    failures = {hz: c for hz, c in table.items()
+                if c is None or c > 100.0}
+    assert not failures, f"centers failing the 100-cent litmus: {failures}"

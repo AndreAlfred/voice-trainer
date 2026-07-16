@@ -101,6 +101,31 @@ def build_log_resample_matrix(
     return W
 
 
+def build_band_resample_matrices(
+    bands: tuple,
+    sample_rate: int,
+    display_freqs: np.ndarray,
+) -> list[np.ndarray]:
+    """Per-band resampling matrices for multi-resolution rendering.
+
+    Each band gets a full build_log_resample_matrix for its own FFT grid,
+    then rows outside the band's [lo, hi) strip are zeroed, so summing
+    `W_i @ spectrum_i` over bands paints every display bin exactly once.
+
+    Args:
+        bands: (lo_hz, hi_hz, n_fft) tuples; hi=None means open-ended.
+    """
+    matrices = []
+    for lo, hi, n_fft in bands:
+        fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
+        W = build_log_resample_matrix(fft_freqs, display_freqs)
+        hi_val = np.inf if hi is None else hi
+        strip = (display_freqs >= lo) & (display_freqs < hi_val)
+        W[~strip] = 0.0
+        matrices.append(W)
+    return matrices
+
+
 class SpectrogramWidget(QWidget):
     """Scrolling spectrogram display widget.
 
@@ -123,6 +148,7 @@ class SpectrogramWidget(QWidget):
         display_seconds: float = 8.0,
         n_log_bins: int = N_LOG_BINS,
         hop: int | None = None,
+        bands: tuple | None = None,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -145,11 +171,16 @@ class SpectrogramWidget(QWidget):
         # Full FFT frequency array for the resampling matrix
         self._fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
 
-        # Precomputed log-resampling matrix: display_col = W @ spectrum_db.
-        # Overlap-averages where display bins are wide, interpolates where
-        # they are narrow. Replaces per-frame np.interp + Gaussian blur.
-        self._resample_matrix = build_log_resample_matrix(
-            self._fft_freqs, self._display_freqs)
+        # Precomputed resampling: display_col = W @ spectrum_db.
+        # Single-FFT mode uses one matrix; multi-resolution mode (bands
+        # given) uses one matrix per band, each painting only its strip.
+        self._bands = bands
+        if bands is not None:
+            self._band_matrices = build_band_resample_matrices(
+                bands, sample_rate, self._display_freqs)
+        else:
+            self._resample_matrix = build_log_resample_matrix(
+                self._fft_freqs, self._display_freqs)
 
         # Time axis: number of columns = display_seconds * update_rate.
         # The hop (analysis stride) is decoupled from n_fft so a larger FFT
@@ -321,18 +352,26 @@ class SpectrogramWidget(QWidget):
         ).astype(lut.dtype)
         self._image_item.setLookupTable(lut)
 
-    def add_column(self, spectrum_db: np.ndarray) -> None:
+    def add_column(self, spectrum_db) -> None:
         """Add a new spectrum column and refresh the display.
 
         Call this every time a new audio chunk has been analyzed.
 
         Args:
-            spectrum_db: Full magnitude spectrum in dB, shape (n_fft//2+1,).
-                         Produced by audio.analysis.compute_spectrogram_column().
+            spectrum_db: In single-FFT mode, one dB spectrum of shape
+                         (n_fft//2+1,) from compute_spectrogram_column().
+                         In multi-resolution mode (bands given at
+                         construction), the list of per-band spectra from
+                         compute_multires_column().
         """
-        # Resample the linear FFT spectrum onto the log display grid —
-        # a single matrix-vector product against the precomputed matrix.
-        display_col = self._resample_matrix @ spectrum_db
+        # Resample onto the log display grid: one matrix-vector product in
+        # single-FFT mode, or one per band (each painting its own strip).
+        if self._bands is not None:
+            display_col = self._band_matrices[0] @ spectrum_db[0]
+            for W, spec in zip(self._band_matrices[1:], spectrum_db[1:]):
+                display_col += W @ spec
+        else:
+            display_col = self._resample_matrix @ spectrum_db
 
         # Scroll the buffer left by one column and place the new column on the right
         self._buffer[:-1] = self._buffer[1:]

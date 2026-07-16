@@ -54,15 +54,25 @@ latency at a configurable bin count/FFT size.
    **Round 2: constant-Q / multi-resolution analysis** (long windows for low
    notes, short for high). Proposed Round 2 litmus, pending Andrew's sign-off:
    **≤100 cents (one semitone) separable at every tested center G2–A7, while
-   holding ≥30 FPS / ≤120 ms p95 and `pytest` green.** With that goalpost the
-   Round 2 work becomes a clean autonomous loop; Andrew's eyes return only for
-   a final taste pass.
+   holding ≥30 FPS / ≤120 ms p95 and `pytest` green.** (Signed off by Andrew
+   2026-07-09.)
+5. **Round 2 landed: multi-resolution analysis (2026-07-09).** Three FFTs per
+   hop, stitched by band: 32768-sample window (~0.74 s, ~1.35 Hz bins) paints
+   80–400 Hz, 8192 paints 400–1600 Hz, 4096 paints 1600 Hz+ — fine pitch where
+   notes are low and sustained, crisp time where onsets live (see
+   `MULTIRES_BANDS` in audio/analysis.py). Eye chart with the app's bands:
+   **every center G2–A7 ≤ 100¢** (G2 100¢, C3 100¢, G3 50¢, C4 25¢, A4 100¢,
+   A5 50¢, A6 50¢, A7 25¢) — G2 was previously not separable at all. Perf
+   litmus in multires mode: `fps=92.2, p95=0.0ms` — PASS with 3× headroom.
+   A regression test pins the ≤100¢ litmus. **Goal 1a litmus: MET on both
+   axes.** Remaining: Andrew's final taste pass on the live app (visual only,
+   not a loop gate).
 
 **Perf litmus:** ≥ 30 FPS and ≤ 120 ms p95 glass-to-glass over a 30 s synthetic
-run, `pytest tests/` green. **Status: MET** at both 2048-bin (2026-07-08,
-human-confirmed) and Round 1 4096-FFT configs (2026-07-09).
-**Resolution litmus (proposed for Round 2):** ≤ 100¢ separable at every tested
-center. **Status: NOT MET** below A5 as of Round 1.
+run, `pytest tests/` green. **Status: MET** through Round 2 multires
+(2026-07-09, fps=92.2).
+**Resolution litmus (Round 2):** ≤ 100¢ separable at every tested center G2–A7.
+**Status: MET** (2026-07-09, guarded by regression test).
 
 ---
 

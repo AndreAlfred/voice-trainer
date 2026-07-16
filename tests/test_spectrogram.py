@@ -228,3 +228,43 @@ class TestResamplerWiring:
         w = SpectrogramWidget(n_fft=2048)
         w.add_column(np.full(1025, -40.0, dtype=np.float32))
         np.testing.assert_allclose(w._buffer[-1], -40.0, atol=1e-3)
+
+
+class TestMultiresRendering:
+    """Widget stitches per-band spectra into one display column."""
+
+    def test_band_matrices_built_when_bands_given(self, qt_app):
+        from ui.spectrogram import SpectrogramWidget
+        from audio.analysis import MULTIRES_BANDS
+        w = SpectrogramWidget(bands=MULTIRES_BANDS)
+        assert len(w._band_matrices) == len(MULTIRES_BANDS)
+        for (_, _, n_fft), W in zip(MULTIRES_BANDS, w._band_matrices):
+            assert W.shape == (w._n_freq_bins, n_fft // 2 + 1)
+
+    def test_every_display_bin_covered_exactly_once(self, qt_app):
+        """Summed across bands, each display row's weights must total 1 —
+        no gaps and no double-painting at band boundaries."""
+        import numpy as np
+        from ui.spectrogram import SpectrogramWidget
+        from audio.analysis import MULTIRES_BANDS
+        w = SpectrogramWidget(bands=MULTIRES_BANDS)
+        total = sum(W.sum(axis=1) for W in w._band_matrices)
+        np.testing.assert_allclose(total, 1.0, atol=1e-4)
+
+    def test_add_column_accepts_band_spectra_list(self, qt_app):
+        import numpy as np
+        from ui.spectrogram import SpectrogramWidget
+        from audio.analysis import MULTIRES_BANDS
+        w = SpectrogramWidget(bands=MULTIRES_BANDS)
+        spectra = [np.full(n_fft // 2 + 1, -40.0, dtype=np.float32)
+                   for (_, _, n_fft) in MULTIRES_BANDS]
+        w.add_column(spectra)
+        np.testing.assert_allclose(w._buffer[-1], -40.0, atol=1e-3)
+
+    def test_single_spectrum_path_still_works(self, qt_app):
+        """bands=None keeps the original one-FFT behavior."""
+        import numpy as np
+        from ui.spectrogram import SpectrogramWidget
+        w = SpectrogramWidget(n_fft=2048)
+        w.add_column(np.full(1025, -40.0, dtype=np.float32))
+        np.testing.assert_allclose(w._buffer[-1], -40.0, atol=1e-3)

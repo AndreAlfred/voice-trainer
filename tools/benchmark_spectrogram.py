@@ -93,6 +93,7 @@ def run_benchmark(
     block_size: int = 1024,
     hop: int | None = None,
     render: bool = True,
+    multires: bool = False,
 ) -> BenchmarkResult:
     """Feed `duration_s` seconds of synthetic audio through the analysis
     (+ optional render) pipeline flat-out, and measure how far real
@@ -104,9 +105,17 @@ def run_benchmark(
     audio timestamp) — exactly the real-time backlog a live session would
     accumulate if the pipeline can't keep up. FPS is columns produced per
     wall-clock second. Together these are the litmus from plan.md.
+
+    With multires=True the loop mirrors ui/app.py exactly: a rolling
+    history sized for the longest band window, one multi-band column per
+    hop, pitch/formants from the recent 4096-sample tail.
     """
+    from audio.analysis import (
+        MULTIRES_BANDS, MULTIRES_MAX_WINDOW, compute_multires_column,
+    )
+
     if hop is None:
-        hop = n_fft // 2
+        hop = 1024 if multires else n_fft // 2
 
     widget = None
     app = None
@@ -118,6 +127,7 @@ def run_benchmark(
             n_fft=n_fft,
             n_log_bins=n_log_bins,
             hop=hop,
+            bands=MULTIRES_BANDS if multires else None,
             display_seconds=8.0,
         )
 
@@ -129,6 +139,8 @@ def run_benchmark(
     buffer = np.zeros(0, dtype=np.float32)
     buffer_start = 0  # index into `audio` of buffer[0]
     pos = 0
+    history = np.zeros(MULTIRES_MAX_WINDOW, dtype=np.float32)
+    min_ready = hop if multires else n_fft
 
     start = time.perf_counter()
     while pos + block_size <= len(audio):
@@ -136,19 +148,27 @@ def run_benchmark(
         pos += block_size
         buffer_start = pos - len(buffer)
 
-        while len(buffer) >= n_fft:
-            window = buffer[:n_fft]
-            spectrum_db = compute_spectrogram_column(window, SAMPLE_RATE, n_fft)
-            _pitch_hz = estimate_pitch(window, SAMPLE_RATE)
-            f1_hz, f2_hz = estimate_formants(window, SAMPLE_RATE)
+        while len(buffer) >= min_ready:
+            if multires:
+                history = np.concatenate([history[hop:], buffer[:hop]])
+                spectrum = compute_multires_column(history, SAMPLE_RATE)
+                recent = history[-4096:]
+                newest_sample = buffer_start + hop - 1
+            else:
+                window = buffer[:n_fft]
+                spectrum = compute_spectrogram_column(window, SAMPLE_RATE, n_fft)
+                recent = window
+                newest_sample = buffer_start + n_fft - 1
+
+            _pitch_hz = estimate_pitch(recent, SAMPLE_RATE)
+            f1_hz, f2_hz = estimate_formants(recent, SAMPLE_RATE)
 
             if widget is not None:
-                widget.add_column(spectrum_db)
+                widget.add_column(spectrum)
                 widget.add_formants(f1_hz, f2_hz)
                 app.processEvents()
 
-            last_sample_index = buffer_start + n_fft - 1
-            audio_time_s = last_sample_index / SAMPLE_RATE
+            audio_time_s = newest_sample / SAMPLE_RATE
             wall_elapsed_s = time.perf_counter() - start
             latencies_ms.append((wall_elapsed_s - audio_time_s) * 1000.0)
 
@@ -199,6 +219,7 @@ def min_separable_cents(
     n_log_bins: int = 1024,
     candidates: tuple = CENTS_CANDIDATES,
     min_dip_db: float = 6.0,
+    bands: tuple | None = None,
 ) -> float | None:
     """Smallest two-tone gap (cents) that renders as two distinct ridges.
 
@@ -221,10 +242,17 @@ def min_separable_cents(
         np.log10(FREQ_MIN_HZ), np.log10(FREQ_MAX_HZ), n_log_bins,
         dtype=np.float32,
     )
-    fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
-    W = build_log_resample_matrix(fft_freqs, display_freqs)
+    if bands is not None:
+        from audio.analysis import compute_multires_column
+        from ui.spectrogram import build_band_resample_matrices
+        band_ws = build_band_resample_matrices(bands, sample_rate, display_freqs)
+        window = max(nf for (_, _, nf) in bands)
+    else:
+        fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
+        W = build_log_resample_matrix(fft_freqs, display_freqs)
+        window = n_fft
 
-    t = np.arange(n_fft) / sample_rate
+    t = np.arange(window) / sample_rate
     for cents in candidates:
         f_a = center_hz * 2.0 ** (-cents / 2400.0)
         f_b = center_hz * 2.0 ** (+cents / 2400.0)
@@ -233,7 +261,13 @@ def min_separable_cents(
 
         tone = (0.5 * np.sin(2 * np.pi * f_a * t)
                 + 0.5 * np.sin(2 * np.pi * f_b * t)).astype(np.float32)
-        col = W @ compute_spectrogram_column(tone, sample_rate, n_fft)
+        if bands is not None:
+            spectra = compute_multires_column(tone, sample_rate, bands)
+            col = band_ws[0] @ spectra[0]
+            for Wb, spec in zip(band_ws[1:], spectra[1:]):
+                col += Wb @ spec
+        else:
+            col = W @ compute_spectrogram_column(tone, sample_rate, n_fft)
 
         # Peak regions: ± quarter-gap around each tone.
         # Valley region: the middle quarter-gap between them.
@@ -258,18 +292,21 @@ def measure_resolution(
     sample_rate: int = SAMPLE_RATE,
     n_log_bins: int = 1024,
     centers: tuple = DEFAULT_CENTERS,
+    bands: tuple | None = None,
 ) -> dict:
     """min_separable_cents at each test center. Keys = center Hz."""
     return {
-        c: min_separable_cents(c, n_fft, sample_rate, n_log_bins)
+        c: min_separable_cents(c, n_fft, sample_rate, n_log_bins, bands=bands)
         for c in centers
     }
 
 
-def print_resolution_table(n_fft: int, n_log_bins: int = 1024) -> None:
+def print_resolution_table(n_fft: int, n_log_bins: int = 1024,
+                           bands: tuple | None = None) -> None:
     from audio.analysis import hz_to_note_name
-    table = measure_resolution(n_fft, n_log_bins=n_log_bins)
-    print(f"resolution eye chart @ n_fft={n_fft}, bins={n_log_bins}")
+    table = measure_resolution(n_fft, n_log_bins=n_log_bins, bands=bands)
+    mode = "multires bands" if bands is not None else f"n_fft={n_fft}"
+    print(f"resolution eye chart @ {mode}, bins={n_log_bins}")
     print(f"{'center':>8}  {'note':>5}  min separable gap")
     for hz, cents in table.items():
         note, octave = hz_to_note_name(hz)
@@ -294,10 +331,15 @@ def main() -> None:
     parser.add_argument("--no-render", action="store_true", help="skip Qt widget rendering (analysis only)")
     parser.add_argument("--resolution", action="store_true",
                         help="print the resolution eye chart instead of the FPS/latency run")
+    parser.add_argument("--multires", action="store_true",
+                        help="use the app's multi-resolution bands instead of a single n_fft")
     args = parser.parse_args()
 
     if args.resolution:
-        print_resolution_table(args.n_fft, n_log_bins=args.bins)
+        from audio.analysis import MULTIRES_BANDS
+        print_resolution_table(
+            args.n_fft, n_log_bins=args.bins,
+            bands=MULTIRES_BANDS if args.multires else None)
         return
 
     result = run_benchmark(
@@ -307,6 +349,7 @@ def main() -> None:
         block_size=args.block_size,
         hop=args.hop,
         render=not args.no_render,
+        multires=args.multires,
     )
     print(result.report())
     print("litmus (>=30fps, p95<=120ms):", "PASS" if result.meets_litmus() else "FAIL")

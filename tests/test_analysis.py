@@ -208,3 +208,38 @@ class TestEstimateFormants:
             assert 200.0 <= f1 <= 900.0
         if f2 is not None:
             assert 700.0 <= f2 <= 3200.0
+
+
+class TestMultiresColumn:
+    """Multi-resolution analysis: one FFT per band, long windows low,
+    short windows high (Goal 1a Round 2)."""
+
+    def test_returns_one_spectrum_per_band(self):
+        from audio.analysis import compute_multires_column, MULTIRES_BANDS
+        samples = np.random.default_rng(0).standard_normal(40000).astype(np.float32)
+        spectra = compute_multires_column(samples, 44100)
+        assert len(spectra) == len(MULTIRES_BANDS)
+        for (lo, hi, n_fft), spec in zip(MULTIRES_BANDS, spectra):
+            assert spec.shape == (n_fft // 2 + 1,)
+
+    def test_bands_tile_display_range_without_gaps(self):
+        """Band edges must cover 80-8000 Hz contiguously: each band's hi
+        equals the next band's lo, first lo <= 80, last hi is None (open)."""
+        from audio.analysis import MULTIRES_BANDS
+        assert MULTIRES_BANDS[0][0] <= 80.0
+        assert MULTIRES_BANDS[-1][1] is None
+        for (_, hi, _), (lo, _, _) in zip(MULTIRES_BANDS[:-1], MULTIRES_BANDS[1:]):
+            assert hi == lo
+
+    def test_windows_shrink_as_frequency_rises(self):
+        """The whole point: long windows (fine pitch) low, short windows
+        (crisp time) high."""
+        from audio.analysis import MULTIRES_BANDS
+        sizes = [n_fft for (_, _, n_fft) in MULTIRES_BANDS]
+        assert sizes == sorted(sizes, reverse=True)
+
+    def test_short_input_is_padded_not_crashed(self):
+        from audio.analysis import compute_multires_column, MULTIRES_BANDS
+        samples = np.zeros(1000, dtype=np.float32)
+        spectra = compute_multires_column(samples, 44100)
+        assert len(spectra) == len(MULTIRES_BANDS)
