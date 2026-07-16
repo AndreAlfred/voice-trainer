@@ -114,3 +114,41 @@ def test_hop_is_configurable_and_sets_column_count():
     dense = run_benchmark(n_fft=4096, hop=1024, duration_s=2.0, render=False)
     sparse = run_benchmark(n_fft=4096, hop=2048, duration_s=2.0, render=False)
     assert dense.n_columns > 1.5 * sparse.n_columns
+
+
+class TestResolutionMetric:
+    """The 'eye chart': the smallest two-tone gap (in cents) that still
+    renders as two distinct ridges in the display column. This is the
+    machine-measurable definition of spectrogram resolution, immune to
+    display settings like dB floor/ceiling."""
+
+    def test_high_frequency_resolves_a_quarter_tone(self):
+        """At A7 (3520 Hz) a 4096 FFT has ~10.8 Hz bins while a quarter
+        tone is ~102 Hz — easily separable."""
+        from tools.benchmark_spectrogram import min_separable_cents
+        result = min_separable_cents(3520.0, n_fft=4096)
+        assert result is not None and result <= 50
+
+    def test_low_frequencies_are_coarser_than_high(self):
+        """Physics: fixed ~10.8 Hz bins are a bigger musical interval at
+        the bottom of the range than at the top."""
+        from tools.benchmark_spectrogram import min_separable_cents
+        low = min_separable_cents(110.0, n_fft=4096)
+        high = min_separable_cents(3520.0, n_fft=4096)
+        assert high is not None
+        assert low is None or low >= high
+
+    def test_bigger_fft_resolves_finer_or_equal(self):
+        """Doubling the FFT window must never make resolution worse."""
+        from tools.benchmark_spectrogram import min_separable_cents
+        at_2048 = min_separable_cents(440.0, n_fft=2048)
+        at_4096 = min_separable_cents(440.0, n_fft=4096)
+        inf = float("inf")
+        assert (at_4096 if at_4096 is not None else inf) <= \
+               (at_2048 if at_2048 is not None else inf)
+
+    def test_measure_resolution_returns_all_centers(self):
+        from tools.benchmark_spectrogram import measure_resolution
+        centers = (262.0, 880.0)
+        table = measure_resolution(n_fft=4096, centers=centers)
+        assert set(table.keys()) == set(centers)
