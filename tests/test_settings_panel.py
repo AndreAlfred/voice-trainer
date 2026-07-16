@@ -46,9 +46,10 @@ class TestSettingsPanel:
         from ui.settings import AppSettings
         from ui.settings_panel import SettingsPanel
         panel = SettingsPanel(AppSettings(colormap_name="viridis"))
-        # The viridis button should have the active style
-        viridis_btn = panel._preset_buttons["viridis"]
-        assert "border: 2px solid" in viridis_btn.styleSheet()
+        # The active button carries the activePreset property (styled by
+        # the per-mode app stylesheets); the others don't
+        assert panel._preset_buttons["viridis"].property("activePreset") is True
+        assert panel._preset_buttons["inferno"].property("activePreset") is False
 
     def test_no_blur_slider(self, qt_app):
         """The Smoothing section was removed with the blur feature."""
