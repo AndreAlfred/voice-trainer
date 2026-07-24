@@ -15,10 +15,46 @@ from a solid spectrogram core.
 ---
 
 ## ▶ Next up — start a work session here
-**Current focus: Goal 1a (fast, high-res spectrogram).** The benchmark harness
-(issue #4) is built: `tools/benchmark_spectrogram.py` feeds synthetic sung-voice
-audio through the real analysis + render pipeline and reports FPS + glass-to-glass
-latency at a configurable bin count/FFT size.
+**Goal 1a (fast, high-res spectrogram) is DONE — both litmus targets MET** and
+regression-guarded, shipped through the benchmark harness (#15), the Round 1
+resampling-matrix rewrite, and Round 2 multi-resolution analysis (#18). The clean
+autonomous loop is finished.
+
+**Next arc — turn the app from a passive mirror into a practice tool.** Direction
+decided (2026-07-24): ship **intonation → ring → memory**, in that order. First,
+a tiny warm-up — **a live taste pass on the new pipeline** (#18's only open box):
+sing low sustained notes and confirm the multi-res spectrogram reads crisp, not
+noisy — visual-only, not a loop gate. Then the three ships:
+
+1. **Intonation feedback** — a target-note line + live cents-deviation readout
+   ("+8¢ sharp of G4"). Today the pitch display shows note + Hz only; there is no
+   concept of *in-tune-ness* anywhere in the code. This is the most-used feedback
+   in a practice room **and** the safe on-ramp to Goal 2: it's the prescriptive
+   interaction (draw a target → compare live → nudge) on a domain where correctness
+   is free (G4 is 392 Hz — no vocal-science debate). *Precision first:* the
+   autocorrelation estimator resolves only to integer lags (~34¢/step at A5), so add
+   sub-sample (parabolic) peak interpolation — a clean loop, litmus: recover a
+   synthetic tone to <1¢. The target-line + cue widget it builds is later reused by
+   the formant target-zone overlay (#10).
+2. **Ring meter** — quantify Singer's-Formant energy (2–3.5 kHz band vs. total) as a
+   single "ring / chiaroscuro" readout. Today that band is only a visual highlight
+   (`singers_formant_visible` toggle); turning it into a number gives real resonance
+   feedback — prescriptive-*lite*, no chart required. Machine-measurable (band-energy
+   ratio / spectral tilt); mild genre caveat to confirm with Andrew.
+3. **Memory** — the app currently has none: sung audio scrolls off and is gone. Start
+   small (freeze / scroll-back the last N seconds to inspect), then grow toward
+   session record + playback and reference overlays (compare a take to a target).
+   Promotes the "Session recording + playback" / "Reference overlays" backlog items.
+   Turns the live toy into something you practice *against*.
+
+**Deliberately back-burnered:** vibrato rate + extent. A clean-loop feature and a
+good future pick, but not in this arc.
+
+**Full prescription (Goal 2 proper)** — formant target zones (#10), live
+vowel-modification cues (#11), voice-type profiles (#12) — follows once intonation
+has proven the target/cue UX and #8 has hardened F1/F2 up high (see Goal 2 below).
+
+**Goal 1a litmus record** — kept as the regression baseline; how it was won:
 
 1. ~~Build the benchmark harness~~ — done. Run with
    `python -m tools.benchmark_spectrogram --bins 2048 --duration 30`.
@@ -186,15 +222,18 @@ becomes the readout layer that prescription builds on.
 - Singer's Formant highlight band (2,000–3,500 Hz)
 - F1/F2 formant rolling-dot overlay
 - Visual customization sidebar (colormap presets, dB range, dot sizes, background) — persisted
-- Smooth topographic rendering (linear interpolation + Gaussian blur, 1024 log bins)
+- Crisp multi-resolution rendering: three FFT bands stitched by frequency + a
+  precomputed log-resampling matrix (Gaussian blur removed), 1024 log bins;
+  ≤100¢ two-tone separability G2–A7, guarded by a regression test (#18)
 - Packaged as a macOS `.app` (PyInstaller)
 
 ## Backlog (not yet designed)
-- Vibrato rate + extent tracking
+- Vibrato rate + extent tracking *(back-burner — see Next up)*
 - Time-scale zoom for the scrolling window
-- Session recording + playback
-- Reference overlays (compare against a recording)
-- Higher FFT resolution/overlap (n_fft 4096, 75% overlap) — supports Goal 1a
+- Session recording + playback *(→ scheduled as the "memory" ship, Next up)*
+- Reference overlays (compare against a recording) *(→ part of the "memory" ship)*
+- ~~Higher FFT resolution/overlap (n_fft 4096, 75% overlap)~~ — shipped in #18
+  (FFT 4096, hop 1024, plus multi-resolution bands)
 
 ## How we work: looping
 We use `/loop` to iterate autonomously toward a goal. A loop is only as good as
