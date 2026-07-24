@@ -11,7 +11,6 @@ voice including harmonics. Color uses the 'magma' colormap: dark purple
 """
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
 import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtCore import Qt
@@ -34,6 +33,99 @@ DISPLAY_DB_MAX = 0.0
 N_LOG_BINS = 1024
 
 
+def build_log_resample_matrix(
+    fft_freqs: np.ndarray,
+    display_freqs: np.ndarray,
+) -> np.ndarray:
+    """Build a matrix W mapping a linear FFT spectrum to log display bins.
+
+    Each display bin owns a frequency band (bounded by the geometric
+    midpoints to its neighbors). Two regimes:
+
+    - Band spans >= one FFT bin width (high frequencies on a log axis):
+      weights are the overlap between the display band and each FFT bin's
+      band — a proper area-weighted average. Crisp and anti-aliased with
+      no post-hoc blur.
+    - Band is narrower than one FFT bin (low frequencies): two-point
+      linear interpolation between the neighboring FFT bin centers, so the
+      low end shows smooth ramps between real values instead of a
+      staircase (design decision A in the 2026-07-09 resolution spec).
+
+    Rows sum to 1, so a flat spectrum maps to a flat column and dB levels
+    are preserved.
+
+    Args:
+        fft_freqs:     Linear FFT bin center frequencies, shape (n_fft//2+1,).
+        display_freqs: Log-spaced display bin centers, strictly increasing.
+
+    Returns:
+        float32 matrix of shape (len(display_freqs), len(fft_freqs)).
+        Apply as `display_col = W @ spectrum_db`.
+    """
+    n_fft_bins = len(fft_freqs)
+    n_display = len(display_freqs)
+    df = float(fft_freqs[1] - fft_freqs[0])
+
+    # FFT bin k covers the linear band [f_k - df/2, f_k + df/2].
+    fft_lo = fft_freqs.astype(np.float64) - df / 2.0
+    fft_hi = fft_freqs.astype(np.float64) + df / 2.0
+
+    # Display bin d covers [lo_edges[d], hi_edges[d]] — geometric midpoints
+    # between neighboring centers; end bins extended by the same log step.
+    centers = display_freqs.astype(np.float64)
+    mids = np.sqrt(centers[:-1] * centers[1:])
+    step = centers[1] / centers[0]
+    lo_edges = np.concatenate([[centers[0] / np.sqrt(step)], mids])
+    hi_edges = np.concatenate([mids, [centers[-1] * np.sqrt(step)]])
+
+    W = np.zeros((n_display, n_fft_bins), dtype=np.float32)
+    for d in range(n_display):
+        lo, hi = lo_edges[d], hi_edges[d]
+        if (hi - lo) >= df:
+            # Downsampling regime: average all FFT bins overlapping the band.
+            overlap = np.minimum(hi, fft_hi) - np.maximum(lo, fft_lo)
+            np.clip(overlap, 0.0, None, out=overlap)
+            total = overlap.sum()
+            if total > 0.0:
+                W[d] = (overlap / total).astype(np.float32)
+                continue
+        # Upsampling regime: linear interpolation between the two FFT bin
+        # centers straddling this display bin's center frequency.
+        c = centers[d]
+        k = int(np.searchsorted(fft_freqs, c))
+        k = min(max(k, 1), n_fft_bins - 1)
+        t = (c - fft_freqs[k - 1]) / (fft_freqs[k] - fft_freqs[k - 1])
+        t = float(np.clip(t, 0.0, 1.0))
+        W[d, k - 1] = 1.0 - t
+        W[d, k] = t
+    return W
+
+
+def build_band_resample_matrices(
+    bands: tuple,
+    sample_rate: int,
+    display_freqs: np.ndarray,
+) -> list[np.ndarray]:
+    """Per-band resampling matrices for multi-resolution rendering.
+
+    Each band gets a full build_log_resample_matrix for its own FFT grid,
+    then rows outside the band's [lo, hi) strip are zeroed, so summing
+    `W_i @ spectrum_i` over bands paints every display bin exactly once.
+
+    Args:
+        bands: (lo_hz, hi_hz, n_fft) tuples; hi=None means open-ended.
+    """
+    matrices = []
+    for lo, hi, n_fft in bands:
+        fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
+        W = build_log_resample_matrix(fft_freqs, display_freqs)
+        hi_val = np.inf if hi is None else hi
+        strip = (display_freqs >= lo) & (display_freqs < hi_val)
+        W[~strip] = 0.0
+        matrices.append(W)
+    return matrices
+
+
 class SpectrogramWidget(QWidget):
     """Scrolling spectrogram display widget.
 
@@ -44,6 +136,9 @@ class SpectrogramWidget(QWidget):
         sample_rate:     Audio sample rate (Hz). Must match analysis settings.
         n_fft:           FFT size used in analysis. Must match analysis settings.
         display_seconds: How many seconds of audio to show at once.
+        n_log_bins:      Log-spaced display bins on the frequency axis.
+        hop:             Analysis stride in samples; must match the audio
+                         loop in ui/app.py. Defaults to n_fft // 2.
     """
 
     def __init__(
@@ -52,6 +147,8 @@ class SpectrogramWidget(QWidget):
         n_fft: int = 2048,
         display_seconds: float = 8.0,
         n_log_bins: int = N_LOG_BINS,
+        hop: int | None = None,
+        bands: tuple | None = None,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -71,22 +168,26 @@ class SpectrogramWidget(QWidget):
         )
         self._n_freq_bins = n_log_bins
 
-        # Full FFT frequency array — used by np.interp in add_column()
+        # Full FFT frequency array for the resampling matrix
         self._fft_freqs = np.fft.rfftfreq(n_fft, d=1.0 / sample_rate).astype(np.float32)
 
-        # Pre-compute mapping: for each log display bin, the index of the nearest
-        # linear FFT bin. Used only for formant scatter positioning (add_formants).
-        _insert = np.searchsorted(self._fft_freqs, self._display_freqs)
-        _lower = np.clip(_insert - 1, 0, len(self._fft_freqs) - 1)
-        _upper = np.clip(_insert,     0, len(self._fft_freqs) - 1)
-        _dist_lower = np.abs(self._fft_freqs[_lower] - self._display_freqs)
-        _dist_upper = np.abs(self._fft_freqs[_upper] - self._display_freqs)
-        self._freq_indices = np.where(_dist_lower <= _dist_upper, _lower, _upper)
+        # Precomputed resampling: display_col = W @ spectrum_db.
+        # Single-FFT mode uses one matrix; multi-resolution mode (bands
+        # given) uses one matrix per band, each painting only its strip.
+        self._bands = bands
+        if bands is not None:
+            self._band_matrices = build_band_resample_matrices(
+                bands, sample_rate, self._display_freqs)
+        else:
+            self._resample_matrix = build_log_resample_matrix(
+                self._fft_freqs, self._display_freqs)
 
-        # Time axis: number of columns = display_seconds * update_rate
-        # Update rate ≈ sample_rate / (n_fft // 2) due to 50% overlap
-        hop = n_fft // 2
-        self._update_rate = sample_rate / hop  # columns per second
+        # Time axis: number of columns = display_seconds * update_rate.
+        # The hop (analysis stride) is decoupled from n_fft so a larger FFT
+        # window doesn't slow the scroll; it must match the hop used by the
+        # audio loop in ui/app.py.
+        self.hop = hop if hop is not None else n_fft // 2
+        self._update_rate = sample_rate / self.hop  # columns per second
         self._n_time_cols = int(display_seconds * self._update_rate)
 
         # Rolling buffer: shape (time_cols, freq_bins), filled with silence
@@ -102,9 +203,6 @@ class SpectrogramWidget(QWidget):
         self._f2_bins = np.full(self._n_time_cols, np.nan, dtype=np.float32)
 
         self._setup_ui()
-
-        # Blur sigma for smooth topographic rendering (0 = disabled)
-        self._blur_sigma = 1.5
 
     def _setup_ui(self) -> None:
         """Build the pyqtgraph plot widget."""
@@ -254,17 +352,26 @@ class SpectrogramWidget(QWidget):
         ).astype(lut.dtype)
         self._image_item.setLookupTable(lut)
 
-    def add_column(self, spectrum_db: np.ndarray) -> None:
+    def add_column(self, spectrum_db) -> None:
         """Add a new spectrum column and refresh the display.
 
         Call this every time a new audio chunk has been analyzed.
 
         Args:
-            spectrum_db: Full magnitude spectrum in dB, shape (n_fft//2+1,).
-                         Produced by audio.analysis.compute_spectrogram_column().
+            spectrum_db: In single-FFT mode, one dB spectrum of shape
+                         (n_fft//2+1,) from compute_spectrogram_column().
+                         In multi-resolution mode (bands given at
+                         construction), the list of per-band spectra from
+                         compute_multires_column().
         """
-        # Interpolate the linear FFT spectrum onto the log-spaced display grid
-        display_col = np.interp(self._display_freqs, self._fft_freqs, spectrum_db)
+        # Resample onto the log display grid: one matrix-vector product in
+        # single-FFT mode, or one per band (each painting its own strip).
+        if self._bands is not None:
+            display_col = self._band_matrices[0] @ spectrum_db[0]
+            for W, spec in zip(self._band_matrices[1:], spectrum_db[1:]):
+                display_col += W @ spec
+        else:
+            display_col = self._resample_matrix @ spectrum_db
 
         # Scroll the buffer left by one column and place the new column on the right
         self._buffer[:-1] = self._buffer[1:]
@@ -272,12 +379,7 @@ class SpectrogramWidget(QWidget):
 
         # Update the image. pyqtgraph ImageItem interprets shape (x, y):
         # x = time (horizontal), y = frequency (vertical)
-        # Apply Gaussian blur for smooth topographic rendering
-        if self._blur_sigma > 0:
-            smoothed = gaussian_filter(self._buffer, sigma=(1.0, self._blur_sigma))
-            self._image_item.setImage(smoothed, autoLevels=False)
-        else:
-            self._image_item.setImage(self._buffer, autoLevels=False)
+        self._image_item.setImage(self._buffer, autoLevels=False)
 
     def add_formants(self, f1_hz: float | None, f2_hz: float | None) -> None:
         """Add new F1/F2 estimates and refresh the scatter display.
@@ -393,12 +495,8 @@ class SpectrogramWidget(QWidget):
         # Singer's formant band
         self._singers_formant_region.setVisible(settings.singers_formant_visible)
 
-        # Blur sigma
-        self._blur_sigma = getattr(settings, 'blur_sigma', 1.5)
-
         # Scroll buffer resize when display_seconds changes
-        hop = self.n_fft // 2
-        new_cols = int(settings.display_seconds * (self.sample_rate / hop))
+        new_cols = int(settings.display_seconds * (self.sample_rate / self.hop))
         if new_cols != self._n_time_cols:
             new_buf = np.full(
                 (new_cols, self._n_freq_bins),

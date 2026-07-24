@@ -22,21 +22,57 @@ latency at a configurable bin count/FFT size.
 
 1. ~~Build the benchmark harness~~ — done. Run with
    `python -m tools.benchmark_spectrogram --bins 2048 --duration 30`.
-2. **Profile** the render pipeline; find the top bottleneck. **Baseline
-   (2026-07-08, this machine, offscreen Qt):** at 2048 bins / 30 s synthetic
-   audio, ~97 FPS, ~0 ms steady-state latency — comfortably passes the litmus
-   in this synthetic single-process harness. Short warm-up runs show latency
-   spikes up to ~127 ms in the first second (cold caches / Qt font init), which
-   is worth profiling next. Open question: does this harness fully capture
-   real glass-to-glass cost (actual GPU compositing, live mic capture jitter,
-   the 16ms UI QTimer), or only pipeline throughput? May need a second,
-   on-screen (non-offscreen) run to sanity-check before declaring 1a "fast
-   enough."
-3. **Loop:** optimize one bottleneck → re-measure → repeat until the litmus
-   holds under realistic conditions, not just the synthetic offscreen harness.
+2. **Baseline measured — the litmus is already met at current settings.**
+   Harness (2026-07-08, offscreen Qt): at 2048 bins / 30 s synthetic audio,
+   ~97 FPS, ~0 ms steady-state latency. Short warm-up runs spike to ~127 ms in
+   the first second (cold caches / Qt font init), but steady state is clean.
+   **Human confirmation (2026-07-08):** Andrew ran the live app and sang/clapped
+   into it — real mic, real screen compositing, the two stages the harness
+   can't see — and it "feels nice and fast," no perceptible glass-to-glass lag.
+   The synthetic proxy and the human test agree, so the harness is trustworthy
+   as a self-verifiable litmus and regression guard. **Open question from before
+   — "does the offscreen harness capture real glass-to-glass cost?" — resolved:
+   close enough; the human test corroborates it.**
+3. **Round 1 resolution work landed** (see
+   `docs/superpowers/specs/2026-07-09-spectrogram-resolution-design.md`):
+   Gaussian blur removed, log-resampling matrix in its place, FFT 2048→4096
+   with hop held at 1024 (75% overlap, scroll rate preserved). Litmus
+   re-verified at the new config (2026-07-09, offscreen Qt):
+   `columns=1288 wall=19.73s fps=65.3 latency: mean=0.0ms p95=0.0ms max=0.0ms`
+   — PASS with 2× headroom. A new two-tone separability test guards real
+   frequency resolution as a machine-checkable regression.
+4. **Resolution is now machine-measurable — the "eye chart" (2026-07-09).**
+   Andrew flagged (correctly) that judging crispness by eye is confounded by
+   display settings (dB floor/ceiling) and can't anchor a loop. The harness now
+   measures resolution directly: `python -m tools.benchmark_spectrogram
+   --resolution --n-fft 4096` reports the smallest two-tone gap (in cents) that
+   renders as two distinct ridges, at musically spread centers. Measured
+   (old → Round 1): C3 800→600¢, G3 600→300¢, C4 600→300¢, A4 300→200¢,
+   A5 200→100¢, A6 100→50¢, A7 50→25¢; G2 not separable in either. Round 1
+   roughly halved the gaps, **but the low-mid voice (G2–C4) still can't show
+   2–3-semitone intervals as separate** — that is the metric-backed case for
+   **Round 2: constant-Q / multi-resolution analysis** (long windows for low
+   notes, short for high). Proposed Round 2 litmus, pending Andrew's sign-off:
+   **≤100 cents (one semitone) separable at every tested center G2–A7, while
+   holding ≥30 FPS / ≤120 ms p95 and `pytest` green.** (Signed off by Andrew
+   2026-07-09.)
+5. **Round 2 landed: multi-resolution analysis (2026-07-09).** Three FFTs per
+   hop, stitched by band: 32768-sample window (~0.74 s, ~1.35 Hz bins) paints
+   80–400 Hz, 8192 paints 400–1600 Hz, 4096 paints 1600 Hz+ — fine pitch where
+   notes are low and sustained, crisp time where onsets live (see
+   `MULTIRES_BANDS` in audio/analysis.py). Eye chart with the app's bands:
+   **every center G2–A7 ≤ 100¢** (G2 100¢, C3 100¢, G3 50¢, C4 25¢, A4 100¢,
+   A5 50¢, A6 50¢, A7 25¢) — G2 was previously not separable at all. Perf
+   litmus in multires mode: `fps=92.2, p95=0.0ms` — PASS with 3× headroom.
+   A regression test pins the ≤100¢ litmus. **Goal 1a litmus: MET on both
+   axes.** Remaining: Andrew's final taste pass on the live app (visual only,
+   not a loop gate).
 
-**Litmus target:** sustain ≥ 30 FPS and ≤ 120 ms glass-to-glass latency at 2048
-log-frequency bins over a 30 s synthetic run, with `pytest tests/` green.
+**Perf litmus:** ≥ 30 FPS and ≤ 120 ms p95 glass-to-glass over a 30 s synthetic
+run, `pytest tests/` green. **Status: MET** through Round 2 multires
+(2026-07-09, fps=92.2).
+**Resolution litmus (Round 2):** ≤ 100¢ separable at every tested center G2–A7.
+**Status: MET** (2026-07-09, guarded by regression test).
 
 ---
 

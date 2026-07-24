@@ -31,10 +31,11 @@ class TestAppSettings:
         from ui.settings import AppSettings
         assert not hasattr(AppSettings(), 'color_floor')
 
-    def test_blur_sigma_default(self):
+    def test_no_blur_sigma_field(self):
+        """Blur was removed in the Round 1 resolution work — the resampling
+        matrix renders crisply without post-hoc smoothing."""
         from ui.settings import AppSettings
-        s = AppSettings()
-        assert s.blur_sigma == 1.5
+        assert not hasattr(AppSettings(), 'blur_sigma')
 
     def test_save_creates_file(self, tmp_path, monkeypatch):
         from ui import settings as m

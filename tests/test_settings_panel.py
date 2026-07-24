@@ -51,18 +51,9 @@ class TestSettingsPanel:
         assert panel._preset_buttons["viridis"].property("activePreset") is True
         assert panel._preset_buttons["inferno"].property("activePreset") is False
 
-    def test_blur_slider_exists(self, qt_app):
+    def test_no_blur_slider(self, qt_app):
+        """The Smoothing section was removed with the blur feature."""
         from ui.settings import AppSettings
         from ui.settings_panel import SettingsPanel
         panel = SettingsPanel(AppSettings())
-        assert hasattr(panel, '_blur_sl')
-
-    def test_blur_slider_emits_signal(self, qt_app):
-        from ui.settings import AppSettings
-        from ui.settings_panel import SettingsPanel
-        received = []
-        panel = SettingsPanel(AppSettings())
-        panel.settings_changed.connect(lambda s: received.append(s))
-        panel._blur_sl.value_changed.emit(2.0)
-        assert len(received) == 1
-        assert received[0].blur_sigma == 2.0
+        assert not hasattr(panel, '_blur_sl')

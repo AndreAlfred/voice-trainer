@@ -106,3 +106,62 @@ def test_reproducible_column_count_across_runs(n_fft):
     a = run_benchmark(n_fft=n_fft, duration_s=1.5, render=False)
     b = run_benchmark(n_fft=n_fft, duration_s=1.5, render=False)
     assert a.n_columns == b.n_columns
+
+
+def test_hop_is_configurable_and_sets_column_count():
+    """The harness must benchmark the app's real config (n_fft 4096, hop
+    1024) — hop halves/doubles the column count for the same audio."""
+    dense = run_benchmark(n_fft=4096, hop=1024, duration_s=2.0, render=False)
+    sparse = run_benchmark(n_fft=4096, hop=2048, duration_s=2.0, render=False)
+    assert dense.n_columns > 1.5 * sparse.n_columns
+
+
+class TestResolutionMetric:
+    """The 'eye chart': the smallest two-tone gap (in cents) that still
+    renders as two distinct ridges in the display column. This is the
+    machine-measurable definition of spectrogram resolution, immune to
+    display settings like dB floor/ceiling."""
+
+    def test_high_frequency_resolves_a_quarter_tone(self):
+        """At A7 (3520 Hz) a 4096 FFT has ~10.8 Hz bins while a quarter
+        tone is ~102 Hz — easily separable."""
+        from tools.benchmark_spectrogram import min_separable_cents
+        result = min_separable_cents(3520.0, n_fft=4096)
+        assert result is not None and result <= 50
+
+    def test_low_frequencies_are_coarser_than_high(self):
+        """Physics: fixed ~10.8 Hz bins are a bigger musical interval at
+        the bottom of the range than at the top."""
+        from tools.benchmark_spectrogram import min_separable_cents
+        low = min_separable_cents(110.0, n_fft=4096)
+        high = min_separable_cents(3520.0, n_fft=4096)
+        assert high is not None
+        assert low is None or low >= high
+
+    def test_bigger_fft_resolves_finer_or_equal(self):
+        """Doubling the FFT window must never make resolution worse."""
+        from tools.benchmark_spectrogram import min_separable_cents
+        at_2048 = min_separable_cents(440.0, n_fft=2048)
+        at_4096 = min_separable_cents(440.0, n_fft=4096)
+        inf = float("inf")
+        assert (at_4096 if at_4096 is not None else inf) <= \
+               (at_2048 if at_2048 is not None else inf)
+
+    def test_measure_resolution_returns_all_centers(self):
+        from tools.benchmark_spectrogram import measure_resolution
+        centers = (262.0, 880.0)
+        table = measure_resolution(n_fft=4096, centers=centers)
+        assert set(table.keys()) == set(centers)
+
+
+def test_round2_resolution_litmus_met_in_multires_mode():
+    """THE Round 2 litmus (plan.md, signed off 2026-07-09): every tested
+    center G2-A7 must separate two tones 100 cents (one semitone) apart
+    with the app's multi-resolution bands."""
+    from audio.analysis import MULTIRES_BANDS
+    from tools.benchmark_spectrogram import measure_resolution
+
+    table = measure_resolution(n_fft=0, bands=MULTIRES_BANDS)
+    failures = {hz: c for hz, c in table.items()
+                if c is None or c > 100.0}
+    assert not failures, f"centers failing the 100-cent litmus: {failures}"
