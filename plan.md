@@ -15,10 +15,26 @@ from a solid spectrogram core.
 ---
 
 ## ▶ Next up — start a work session here
-**Current focus: Goal 1a (fast, high-res spectrogram).** The benchmark harness
-(issue #4) is built: `tools/benchmark_spectrogram.py` feeds synthetic sung-voice
-audio through the real analysis + render pipeline and reports FPS + glass-to-glass
-latency at a configurable bin count/FFT size.
+**Goal 1a (fast, high-res spectrogram) is DONE — both litmus targets MET** and
+regression-guarded, shipped through the benchmark harness (#15), the Round 1
+resampling-matrix rewrite, and Round 2 multi-resolution analysis (#18). The clean
+autonomous loop is finished; the next session's job is to **pick the next
+direction — a human checkpoint, not a loop.**
+
+**→ Do these in order:**
+- **Live taste pass on the new pipeline** *(small — do first)*. Round 2 changed how
+  the spectrogram *looks* (Gaussian blur removed, multi-resolution bands). Sing low
+  sustained notes and confirm it reads crisp, not noisy — the only open box on #18,
+  visual-only and not a loop gate.
+- **Then choose a north-star frontier** *(needs Andrew's judgment)*:
+  **Goal 2 — prescriptive** is the recommended next leap, because the fo/F1/F2
+  measurement layer is already in place: harden F1/F2 in the upper range (#8, a
+  prerequisite) → digitize the Coffin chart into our own dataset (#7) →
+  target-formant-zone overlay (#10). Alternatively **Goal 1b — characterful UI**
+  (#13/#14): iterate-with-checkpoints on the Frutiger-Aero/skeuomorphic look and
+  spectrogram palettes.
+
+**Goal 1a litmus record** — kept as the regression baseline; how it was won:
 
 1. ~~Build the benchmark harness~~ — done. Run with
    `python -m tools.benchmark_spectrogram --bins 2048 --duration 30`.
